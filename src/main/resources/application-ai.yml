@@ -2,3 +2,10 @@
 llm:
   provider: ${LLM_PROVIDER:mock}   # mock 이면 MockLlmClient
   model: ${LLM_MODEL:}
+
+# Spring AI 자동 설정도 같은 LLM_PROVIDER 로 선택 (google-genai 일 때만 Gemini 활성)
+# mock 이면 어떤 제공자와도 일치하지 않아 비활성 → 키 없는 로컬·CI 에서도 기동
+spring:
+  ai:
+    model:
+      chat: ${LLM_PROVIDER:mock}
