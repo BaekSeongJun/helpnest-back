@@ -1,0 +1,14 @@
+# @owner BSJ — 로컬 PostgreSQL (docs/02 §7)
+services:
+  postgres:
+    image: postgres:16
+    container_name: helpnest-db
+    environment:
+      POSTGRES_DB: helpnest
+      POSTGRES_USER: helpnest
+      POSTGRES_PASSWORD: helpnest
+      TZ: Asia/Seoul
+    ports: ["5432:5432"]
+    volumes: [helpnest-data:/var/lib/postgresql/data]
+volumes:
+  helpnest-data:
