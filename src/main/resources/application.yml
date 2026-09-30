@@ -27,6 +27,8 @@ spring:
 jwt:
   secret: ${JWT_SECRET}      # HS256 → 32바이트 이상. 운영 값은 환경변수로만
   access-ttl: 30m
+  refresh-ttl: 14d
+  refresh-cookie-secure: ${REFRESH_COOKIE_SECURE:true}   # 로컬 http 개발 시 false
 
 app:
   front-origin: ${FRONT_ORIGIN:http://localhost:3000}   # CORS 허용 (/api/attachments, /ws 만)

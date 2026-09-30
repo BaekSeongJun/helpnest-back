@@ -25,7 +25,7 @@ class JwtProviderTest {
     private static final SecretKey OTHER_KEY = JwtProvider.secretKey("another-secret-key-for-unit-test-32bytes");
 
     private static JwtProvider provider(Duration ttl) {
-        return new JwtProvider(NimbusJwtEncoder.withSecretKey(KEY).build(), new JwtProperties(null, ttl));
+        return new JwtProvider(NimbusJwtEncoder.withSecretKey(KEY).build(), new JwtProperties(null, ttl, Duration.ofDays(14), true));
     }
 
     private static JwtDecoder decoder(SecretKey key) {
