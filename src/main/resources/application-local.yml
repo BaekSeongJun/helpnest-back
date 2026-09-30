@@ -6,6 +6,9 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/helpnest}
     username: ${DB_USERNAME:helpnest}
     password: ${DB_PASSWORD:helpnest}
+  flyway:
+    # 시드(R__seed_*)는 로컬에서만. 운영(prod)은 기본값 db/migration 만 사용 (docs/03 §5)
+    locations: classpath:db/migration, classpath:db/seed
 
 # 로컬 개발 전용 기본값 (운영 비밀 아님). 운영(prod)은 기본값 없이 JWT_SECRET 필수
 jwt:
