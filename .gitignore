@@ -42,3 +42,4 @@ out/
 shrimp-rules.md
 .env
 application-local-secret.yml
+uploads/
