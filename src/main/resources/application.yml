@@ -1,0 +1,34 @@
+# @owner BSJ — 공용 설정. 도메인 전용 설정은 각자 파일로 분리 (docs/01 §4.2)
+spring:
+  application:
+    name: helpnest-back
+  config:
+    import:
+      - optional:classpath:application-ws.yml   # 박민재
+      - optional:classpath:application-ai.yml   # 신수진
+      - optional:classpath:application-aws.yml  # 신수진
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # 스키마는 Flyway로만 변경
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: Asia/Seoul
+  flyway:
+    out-of-order: true     # 3명이 각자 만든 마이그레이션을 버전 순서와 무관하게 적용
+  jackson:
+    time-zone: Asia/Seoul
+
+server:
+  forward-headers-strategy: framework   # 프록시·CloudFront 뒤 실제 클라이언트 IP 사용 (docs/02 §2.1)
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

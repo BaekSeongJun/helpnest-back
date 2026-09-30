@@ -1,0 +1,25 @@
+#!/bin/sh
+# @owner BSJ — push 전 pull 확인 (docs/01 §3.3). 활성화: git config core.hooksPath .githooks
+branch=$(git rev-parse --abbrev-ref HEAD)
+
+if [ "$branch" = "main" ] || [ "$branch" = "dev" ]; then
+  echo "[ERROR] $branch 브랜치에 직접 push 할 수 없습니다. PR을 사용하세요."
+  exit 1
+fi
+
+git fetch origin --quiet
+
+if git rev-parse --verify --quiet "origin/$branch" >/dev/null; then
+  behind=$(git rev-list --count "HEAD..origin/$branch")
+  if [ "$behind" -gt 0 ]; then
+    echo "[ERROR] origin/$branch 에 새 커밋 ${behind}개. 먼저 git pull origin $branch"
+    exit 1
+  fi
+fi
+
+behind_dev=$(git rev-list --count "HEAD..origin/dev")
+if [ "$behind_dev" -gt 0 ]; then
+  echo "[ERROR] origin/dev 에 새 커밋 ${behind_dev}개. 먼저 git pull origin dev 후 빌드 확인"
+  exit 1
+fi
+echo "[OK] pull 할 내용 없음. push 진행"

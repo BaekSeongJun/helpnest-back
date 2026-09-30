@@ -1,0 +1,8 @@
+# @owner BSJ — 로컬 프로필 (docker-compose DB). 비밀값은 application-local-secret.yml(커밋 금지)에
+spring:
+  config:
+    import: optional:classpath:application-local-secret.yml
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/helpnest}
+    username: ${DB_USERNAME:helpnest}
+    password: ${DB_PASSWORD:helpnest}
