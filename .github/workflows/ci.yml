@@ -1,0 +1,39 @@
+# @owner SSJ
+name: back-ci
+on:
+  pull_request:
+    branches: [dev, main]
+concurrency:
+  group: back-ci-${{ github.head_ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: helpnest
+          POSTGRES_USER: helpnest
+          POSTGRES_PASSWORD: helpnest
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U helpnest"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - run: chmod +x mvnw   # Windows에서 커밋하면 실행 권한이 빠질 수 있음
+      - run: ./mvnw -B verify
+        env:
+          SPRING_PROFILES_ACTIVE: local
+          DB_URL: jdbc:postgresql://localhost:5432/helpnest
+          DB_USERNAME: helpnest
+          DB_PASSWORD: helpnest
+          JWT_SECRET: ci-only-secret-key-ci-only-secret-key-0000
+          LLM_PROVIDER: mock
