@@ -1,0 +1,4 @@
+# @owner SSJ — AI 설정 (application.yml 에서 import, docs/05 §2)
+llm:
+  provider: ${LLM_PROVIDER:mock}   # mock 이면 MockLlmClient
+  model: ${LLM_MODEL:}
