@@ -24,6 +24,13 @@ spring:
   jackson:
     time-zone: Asia/Seoul
 
+jwt:
+  secret: ${JWT_SECRET}      # HS256 → 32바이트 이상. 운영 값은 환경변수로만
+  access-ttl: 30m
+
+app:
+  front-origin: ${FRONT_ORIGIN:http://localhost:3000}   # CORS 허용 (/api/attachments, /ws 만)
+
 server:
   forward-headers-strategy: framework   # 프록시·CloudFront 뒤 실제 클라이언트 IP 사용 (docs/02 §2.1)
 
