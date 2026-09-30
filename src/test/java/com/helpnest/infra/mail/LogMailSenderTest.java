@@ -2,6 +2,7 @@
 package com.helpnest.infra.mail;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 import java.time.OffsetDateTime;
 import org.junit.jupiter.api.DisplayName;
@@ -13,7 +14,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 @ExtendWith(OutputCaptureExtension.class)
 class LogMailSenderTest {
 
-    private final LogMailSender sender = new LogMailSender();
+    private final LogMailSender sender = new LogMailSender(mock(MailLogRepository.class));
 
     @Test
     @DisplayName("로그에는 유형·티켓번호·마스킹 이메일만, 원문 이메일·토큰 URL 없음")
