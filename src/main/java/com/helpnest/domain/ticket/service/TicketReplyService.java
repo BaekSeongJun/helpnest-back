@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.helpnest.domain.attachment.port.AttachmentPort;
 import com.helpnest.domain.ticket.dto.ConsoleReplyCreateRequest;
+import com.helpnest.domain.ticket.dto.CustomerReplyCreateRequest;
 import com.helpnest.domain.ticket.dto.ReplyResponse;
 import com.helpnest.domain.ticket.dto.TicketAttachmentResponse;
 import com.helpnest.domain.ticket.entity.ActorRole;
@@ -115,7 +116,7 @@ public class TicketReplyService {
                 new ReplyCreatedEvent(ticketId, reply.getId(), WriterType.AGENT.name(), internal));
         log.info("[reply] 상담원 {} ticketNo={} replyId={} by={}", internal ? "내부 메모" : "공개 답변",
                 ticket.getTicketNo(), reply.getId(), actorId);
-        return toResponse(reply);
+        return toResponse(reply, ticket);
     }
 
     /**
@@ -134,15 +135,85 @@ public class TicketReplyService {
      * 첨부는 방금 연결한 것을 다시 조회한다 — 포트가 연결 결과를 돌려주지 않고, 실제로 연결된
      * 것만 응답에 담아야 하기 때문이다.
      */
-    private ReplyResponse toResponse(TicketReply reply) {
+    private ReplyResponse toResponse(TicketReply reply, Ticket ticket) {
         List<TicketAttachmentResponse> attachments = attachmentLookupRepository
                 .findByReplyId(reply.getId()).stream()
                 .map(row -> new TicketAttachmentResponse(row.getAttachmentId(), row.getOriginalName(),
                         row.getSize()))
                 .toList();
 
-        return new ReplyResponse(reply.getId(), reply.getWriterType(),
-                memberNameLookupRepository.findName(reply.getWriterId()), reply.getContent(),
-                reply.isInternal(), attachments, reply.getCreatedAt());
+        return new ReplyResponse(reply.getId(), reply.getWriterType(), writerNameOf(reply, ticket),
+                reply.getContent(), reply.isInternal(), attachments, reply.getCreatedAt());
+    }
+
+    /**
+     * 작성자 이름. 비회원(GUEST)은 writer_id 가 없으므로 티켓에 적힌 비회원 이름을 쓴다 —
+     * 회원 조회로는 이름을 찾을 수 없어 null 이 되고, 화면에 작성자가 빈칸으로 나간다.
+     */
+    private String writerNameOf(TicketReply reply, Ticket ticket) {
+        return reply.getWriterType() == WriterType.GUEST
+                ? ticket.getGuestName()
+                : memberNameLookupRepository.findName(reply.getWriterId());
+    }
+
+    /**
+     * 고객의 추가 답글 (POST /api/tickets/{id}/replies, FR-INQ-06).
+     *
+     * <h2>RESOLVED 에서 답글이 달리면 재문의로 되돌린다</h2>
+     * 전이표(PRD 5장)의 {@code RESOLVED → IN_PROGRESS} 수행자가 SYSTEM·CUSTOMER 이므로
+     * {@code actorRole} 을 CUSTOMER 로 넘겨야 통과한다. 해결됐다고 본 건에 고객이 다시 말을
+     * 걸었다는 뜻이므로 상담원의 처리 중 목록에 다시 올라와야 한다.
+     *
+     * <h2>CLOSED 에는 답글을 막는다</h2>
+     * 종료된 티켓은 상태가 불변이고(전이표에서 CLOSED 는 비어 있다) 담당자도 손을 뗀 상태다.
+     * 답글만 쌓이면 아무도 보지 않는 글이 되므로 {@code TICKET_ALREADY_CLOSED}(409) 로 거절하고
+     * 새 문의를 받는다.
+     *
+     * <h2>내부 메모는 만들 수 없다</h2>
+     * {@code isInternal} 을 요청에서 받지 않고 false 로 고정한다
+     * ({@code CustomerReplyCreateRequest} 주석) — 받아서 무시하는 대신 아예 두지 않았다.
+     *
+     * @param customerId 회원이면 member_id, 비회원이면 null
+     * @throws BusinessException TICKET_NOT_FOUND(404, 남의 티켓도 같은 응답),
+     *                           TICKET_ALREADY_CLOSED(409)
+     */
+    @Transactional
+    public ReplyResponse addCustomerReply(Long ticketId, CustomerReplyCreateRequest req,
+            Long customerId) {
+        Ticket ticket = ticketRepository.findByIdForUpdate(ticketId)
+                .orElseThrow(() -> new BusinessException(TicketErrorCode.NOT_FOUND));
+
+        // 남의 티켓은 존재 여부를 알리지 않기 위해 404 다(CustomerTicketService 주석과 같은 이유)
+        if (!Objects.equals(ticket.getCustomerId(), customerId)) {
+            throw new BusinessException(TicketErrorCode.NOT_FOUND);
+        }
+        if (ticket.getStatus() == TicketStatus.CLOSED) {
+            throw new BusinessException(TicketErrorCode.ALREADY_CLOSED);
+        }
+        if (req.content().length() > MAX_CONTENT_LENGTH) {
+            throw new BusinessException(TicketErrorCode.CONTENT_TOO_LONG);
+        }
+
+        WriterType writerType = customerId != null ? WriterType.CUSTOMER : WriterType.GUEST;
+        TicketReply reply = ticketReplyRepository.save(TicketReply.builder()
+                .ticketId(ticketId)
+                .writerId(customerId)
+                .writerType(writerType)
+                .content(req.content())
+                .isInternal(false)
+                .build());
+
+        linkAttachments(req.attachmentIds(), ticketId, reply.getId());
+
+        if (ticket.getStatus() == TicketStatus.RESOLVED) {
+            ticketService.changeStatus(ticketId, TicketStatus.IN_PROGRESS, "고객 재문의", customerId,
+                    ActorRole.CUSTOMER);
+        }
+
+        eventPublisher.publishEvent(
+                new ReplyCreatedEvent(ticketId, reply.getId(), writerType.name(), false));
+        log.info("[reply] 고객 답글 ticketNo={} replyId={} writerType={}", ticket.getTicketNo(),
+                reply.getId(), writerType);
+        return toResponse(reply, ticket);
     }
 }
