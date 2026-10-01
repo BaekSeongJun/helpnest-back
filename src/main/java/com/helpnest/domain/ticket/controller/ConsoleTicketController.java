@@ -1,10 +1,13 @@
 // @owner PMJ
 package com.helpnest.domain.ticket.controller;
 
+import java.util.List;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,7 +18,11 @@ import org.springframework.web.bind.annotation.RestController;
 import com.helpnest.domain.assignment.service.AssignmentService;
 import com.helpnest.domain.ticket.dto.ClassificationUpdateRequest;
 import com.helpnest.domain.ticket.dto.TicketAssignRequest;
+import com.helpnest.domain.ticket.dto.TicketHistoryResponse;
+import com.helpnest.domain.ticket.dto.TicketStatusChangeRequest;
+import com.helpnest.domain.ticket.entity.ActorRole;
 import com.helpnest.domain.ticket.service.TicketClassificationService;
+import com.helpnest.domain.ticket.service.TicketService;
 import com.helpnest.global.common.ApiResponse;
 import com.helpnest.global.security.JwtProvider;
 
@@ -42,6 +49,7 @@ public class ConsoleTicketController {
 
     private final AssignmentService assignmentService;
     private final TicketClassificationService classificationService;
+    private final TicketService ticketService;
 
     /** 수동 배정·재배정 (FR-ASN-02). 담당자가 이미 있으면 REASSIGN 이력으로 남는다 */
     @PatchMapping("/{ticketId}/assign")
@@ -78,6 +86,52 @@ public class ConsoleTicketController {
         classificationService.applyManualUpdate(ticketId, req.category(), req.priority(),
                 JwtProvider.memberId(jwt), isLeadOrAbove(jwt));
         return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    /**
+     * 상태 변경 (docs/04 §7, FR-TKT-03). 담당 AGENT 또는 LEAD+ 만 — 담당자 검증은 티켓을 봐야
+     * 알 수 있으므로 서비스가 한다.
+     *
+     * <p>전이 가능 여부를 {@code @PreAuthorize} 로 표현하지 않는 이유는 전이표가 현재 상태에
+     * 따라 달라지기 때문이다. 권한 식에 티켓 상태를 넣으면 전이표가 두 곳으로 갈라진다.
+     */
+    @PatchMapping("/{ticketId}/status")
+    public ResponseEntity<ApiResponse<Void>> changeStatus(
+            @PathVariable Long ticketId,
+            @Valid @RequestBody TicketStatusChangeRequest req,
+            @AuthenticationPrincipal Jwt jwt) {
+        ticketService.changeStatus(ticketId, req.toStatus(), req.memo(),
+                JwtProvider.memberId(jwt), actorRole(jwt));
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    /**
+     * 상태·배정·분류 변경 이력 (docs/04 §7). 담당자가 아니어도 AGENT 이상이면 볼 수 있다 —
+     * 인수인계나 팀장 확인처럼 남의 티켓 이력을 읽어야 하는 경우가 정상 업무다.
+     */
+    @GetMapping("/{ticketId}/histories")
+    public ResponseEntity<ApiResponse<List<TicketHistoryResponse>>> histories(
+            @PathVariable Long ticketId) {
+        return ResponseEntity.ok(ApiResponse.ok(ticketService.findHistories(ticketId)));
+    }
+
+    /**
+     * JWT role 클레임을 전이 판정용 {@link ActorRole} 로 바꾼다. 두 enum 은 값 집합이 달라
+     * {@code valueOf} 로 바로 변환할 수 없다 — MemberRole 의 CUSTOMER 와 비회원 GUEST 가
+     * 모두 ActorRole.CUSTOMER 로 모인다(ActorRole 주석).
+     *
+     * <p>모르는 값은 가장 권한이 낮은 CUSTOMER 로 떨어뜨린다. 이 경로는 SecurityConfig 가
+     * 이미 AGENT 이상으로 막고 있어 실제로는 도달하지 않지만, 역할이 늘었을 때 조용히
+     * 상담원 권한을 얻는 것보다 거부되는 쪽이 안전하다.
+     */
+    private static ActorRole actorRole(Jwt jwt) {
+        String role = jwt.getClaimAsString(JwtProvider.ROLE_CLAIM);
+        return switch (role == null ? "" : role) {
+            case "AGENT" -> ActorRole.AGENT;
+            case "LEAD" -> ActorRole.LEAD;
+            case "ADMIN" -> ActorRole.ADMIN;
+            default -> ActorRole.CUSTOMER;
+        };
     }
 
     /** 역할 계층(ADMIN > LEAD)은 Security 가 쓰고, 서비스 분기용으로는 클레임을 직접 본다 */
