@@ -6,6 +6,8 @@ import com.helpnest.global.error.CommonErrorCode;
 import com.helpnest.global.error.ErrorCode;
 import com.helpnest.global.security.JwtProperties;
 import com.helpnest.global.security.JwtProvider;
+import com.helpnest.global.security.RateLimitFilter;
+import com.helpnest.global.security.RateLimiter;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
@@ -34,6 +36,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -54,7 +57,8 @@ import tools.jackson.databind.json.JsonMapper;
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JsonMapper jsonMapper) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JsonMapper jsonMapper, RateLimiter rateLimiter,
+            @Value("${app.rate-limit.enabled:true}") boolean rateLimitEnabled) throws Exception {
         // 토큰 없음·만료·위조 → 401, 역할 부족 → 403 (ApiResponse 형식)
         AuthenticationEntryPoint unauthorized = (req, res, e) -> writeError(res, jsonMapper, CommonErrorCode.UNAUTHORIZED);
         AccessDeniedHandler forbidden = (req, res, e) -> writeError(res, jsonMapper, CommonErrorCode.FORBIDDEN);
@@ -85,6 +89,10 @@ public class SecurityConfig {
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(unauthorized)
                         .accessDeniedHandler(forbidden));
+        // 요청 제한은 인증보다 먼저 (대입 공격이 토큰 검증 비용까지 쓰지 않게). 테스트는 config/application.yml 에서 끈다
+        if (rateLimitEnabled) {
+            http.addFilterBefore(new RateLimitFilter(rateLimiter, jsonMapper), BearerTokenAuthenticationFilter.class);
+        }
         return http.build();
     }
 
