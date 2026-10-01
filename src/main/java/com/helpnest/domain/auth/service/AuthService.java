@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -39,6 +40,7 @@ import org.springframework.util.StringUtils;
 public class AuthService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
+    static final Duration ROTATION_GRACE = Duration.ofSeconds(30);
 
     private final MemberRepository memberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -79,18 +81,23 @@ public class AuthService {
     /**
      * Refresh 회전: 쓰인 토큰은 폐기하고 새로 발급.
      * 이미 폐기된 토큰이 다시 오면 탈취로 보고 그 회원의 Refresh 를 전부 폐기한다 — 예외를 던져도 폐기는 커밋되도록 noRollbackFor.
+     * 단 회전된 지 {@link #ROTATION_GRACE} 안이면 응답 유실·동시 탭으로 보고 재발급한다 (정상 사용자 강제 로그아웃 방지).
+     * ponytail: 유예 안에서는 탈취 토큰도 통과 — 30초 창을 줄이거나 토큰 계보(parent_id)로 형제만 폐기하는 방식으로 강화 가능
      */
     @Transactional(noRollbackFor = BusinessException.class)
     public Tokens refresh(String rawToken) {
         RefreshToken token = findToken(rawToken);
-        if (token.isRevoked()) {
+        OffsetDateTime now = OffsetDateTime.now();
+        if (token.isRevoked() && !token.isRecentlyRotated(now, ROTATION_GRACE)) {
             refreshTokenRepository.revokeAllByMemberId(token.getMemberId());
             throw new BusinessException(AuthErrorCode.REFRESH_INVALID);
         }
-        if (!token.isUsable(OffsetDateTime.now())) {
-            throw new BusinessException(AuthErrorCode.REFRESH_INVALID);
+        if (!token.isRevoked()) {
+            if (!token.isUsable(now)) {
+                throw new BusinessException(AuthErrorCode.REFRESH_INVALID);
+            }
+            token.rotate(now);
         }
-        token.revoke();
 
         Member member = memberRepository.findById(token.getMemberId())
                 .orElseThrow(() -> new BusinessException(AuthErrorCode.REFRESH_INVALID));
