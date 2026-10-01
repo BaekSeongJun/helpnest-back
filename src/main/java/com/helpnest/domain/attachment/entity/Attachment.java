@@ -3,10 +3,9 @@ package com.helpnest.domain.attachment.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -21,8 +20,14 @@ import org.hibernate.annotations.CreationTimestamp;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Attachment {
 
+    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final long ID_MIN = 1L << 52;
+
+    /**
+     * 추측 불가 난수 [2^52, 2^53). 비회원 첨부는 업로더가 NULL 이라 ID 를 아는 것이 곧 소유 증명
+     * (순번이면 남의 업로드를 자기 티켓에 먼저 연결할 수 있다). 2^53 미만 = JS Number 안전 정수.
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "attachment_id")
     private Long id;
 
@@ -58,5 +63,6 @@ public class Attachment {
         this.contentType = contentType;
         this.sizeBytes = sizeBytes;
         this.uploadedBy = uploadedBy;
+        this.id = ID_MIN + RANDOM.nextLong(ID_MIN);
     }
 }

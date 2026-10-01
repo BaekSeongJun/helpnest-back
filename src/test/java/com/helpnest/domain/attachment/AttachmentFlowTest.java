@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.helpnest.domain.attachment.port.AttachmentPort;
+import com.helpnest.domain.attachment.repository.AttachmentRepository;
+import com.helpnest.domain.attachment.service.OrphanAttachmentCleaner;
 import com.helpnest.domain.member.entity.Member;
 import com.helpnest.domain.member.entity.MemberRole;
 import com.helpnest.domain.member.repository.MemberRepository;
@@ -70,6 +72,10 @@ class AttachmentFlowTest {
     JwtProvider jwtProvider;
     @Autowired
     JwtEncoder jwtEncoder;
+    @Autowired
+    AttachmentRepository attachmentRepository;
+    @Autowired
+    OrphanAttachmentCleaner orphanAttachmentCleaner;
 
     Member customer;
     Member otherCustomer;
@@ -143,6 +149,30 @@ class AttachmentFlowTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get(url))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("ID 는 추측 불가 난수 [2^52, 2^53) — JS 안전 정수 범위")
+    void randomId() throws Exception {
+        Long id = upload(bearer(customer));
+
+        assertThat(id).isBetween(1L << 52, (1L << 53) - 1);
+    }
+
+    @Test
+    @DisplayName("고아 정리: 미연결 첨부만 행·파일 삭제, 연결된 첨부는 유지")
+    void orphanCleanup() throws Exception {
+        Long orphan = upload(bearer(customer));
+        Long linked = upload(bearer(customer));
+        attachmentPort.linkToTicket(List.of(linked), saveTicket(customer.getId()).getId(), null);
+        String orphanKey = attachmentRepository.findById(orphan).orElseThrow().getStoredKey();
+
+        int deleted = orphanAttachmentCleaner.cleanup(OffsetDateTime.now().plusMinutes(1));
+
+        assertThat(deleted).isGreaterThanOrEqualTo(1);
+        assertThat(attachmentRepository.existsById(orphan)).isFalse();
+        assertThat(attachmentRepository.existsById(linked)).isTrue();
+        assertThat(uploadDir.resolve(orphanKey)).doesNotExist();
     }
 
     private Long upload(String bearer) throws Exception {

@@ -2,11 +2,14 @@
 package com.helpnest.domain.attachment.repository;
 
 import com.helpnest.domain.attachment.entity.Attachment;
+import java.time.OffsetDateTime;
 import java.util.Collection;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * ticket·ticket_reply(박민재) 는 읽기만 한다 — docs/02 §5 읽기 전용 예외.
@@ -42,4 +45,13 @@ public interface AttachmentRepository extends JpaRepository<Attachment, Long> {
     @Query(value = "SELECT COALESCE(BOOL_OR(is_internal), FALSE) FROM ticket_reply WHERE reply_id = :replyId",
             nativeQuery = true)
     boolean isInternalReply(@Param("replyId") Long replyId);
+
+    /** 고아 첨부(cutoff 이전 업로드, 아직 미연결) — 한 번에 최대 500건 */
+    List<Attachment> findTop500ByTicketIdIsNullAndCreatedAtBefore(OffsetDateTime cutoff);
+
+    /** 정리 직전에 연결됐을 수 있으므로 ticket_id IS NULL 조건을 다시 건다 */
+    @Transactional
+    @Modifying
+    @Query("DELETE FROM Attachment a WHERE a.id = :id AND a.ticketId IS NULL")
+    int deleteIfOrphan(@Param("id") Long id);
 }
