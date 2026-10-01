@@ -6,6 +6,7 @@ import com.helpnest.domain.faq.service.FaqService;
 import com.helpnest.domain.ticket.entity.TicketCategory;
 import com.helpnest.global.common.ApiResponse;
 import com.helpnest.global.common.PageResponse;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -30,6 +31,12 @@ public class FaqController {
             @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20, sort = "viewCount", direction = Sort.Direction.DESC) Pageable pageable) {
         return ApiResponse.ok(faqService.search(true, category, keyword, pageable));
+    }
+
+    /** 접수 폼 추천 (FR-INQ-05). 공개 글 중 조회수 상위 3건, q 가 2자 미만이면 빈 배열 */
+    @GetMapping("/suggest")
+    public ApiResponse<List<FaqResponse>> suggest(@RequestParam(required = false) String q) {
+        return ApiResponse.ok(faqService.suggest(q));
     }
 
     /** 아코디언을 열 때 호출 → 조회수 +1 */
