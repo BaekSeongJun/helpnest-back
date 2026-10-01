@@ -23,9 +23,10 @@ import com.helpnest.global.error.BusinessException;
  * <p>인터페이스 타입으로 주입받는 것이 핵심이다. 구현체 타입으로 받으면 S1 에 구현이 교체될 때
  * 테스트가 함께 깨져 배선 검증의 의미가 없어진다.
  *
- * <p><b>S1 현재 상태:</b> 분류 포트는 실구현으로 교체됐고(배정까지 이어진다) 조회·비회원 포트는
- * 아직 스텁이다. 그래서 검증 내용이 포트마다 다르다 — 실구현 포트는 "실제 계약"을, 스텁 포트는
- * "호출해도 터지지 않음"을 본다.
+ * <p><b>S1 현재 상태:</b> 분류 포트와 비회원 조회 2건(verifyGuest, findGuestPasswordHash)은
+ * 실구현으로 교체됐고 조회 포트와 updateGuestPassword 는 아직 스텁이다. 그래서 검증 내용이
+ * 포트마다 다르다 — 실구현 포트는 "실제 계약"을, 스텁 포트는 "호출해도 터지지 않음"을 본다.
+ * 비회원 포트의 실제 동작은 {@code TicketGuestPortTest} 가 실제 티켓으로 검증한다.
  */
 @SpringBootTest
 @DisplayName("박민재 포트 S0 스텁 — 배선과 호출 가능성")
@@ -82,10 +83,16 @@ class TicketPortStubTest {
         assertThat(queryPort.findResolvedReplies("DELIVERY", 3)).isEmpty();
     }
 
+    /**
+     * verifyGuest·findGuestPasswordHash 는 CR #34 로 실구현됐다. 없는 조합에 null 을 준다는
+     * 결과는 스텁 시절과 같지만 의미가 다르다 — 미구현이 아니라 "조회했는데 없다"는 뜻이다.
+     * 실제로 찾아내는지는 TicketGuestPortTest 가 티켓을 만들어 검증한다.
+     */
     @Test
-    @DisplayName("비회원 확인 포트는 null 을 주고 비밀번호 변경은 예외 없이 무시된다")
+    @DisplayName("비회원 포트는 없는 조합에 null 을 주고 비밀번호 변경은 예외 없이 무시된다")
     void 비회원_포트() {
         assertThat(guestPort.verifyGuest("HN-20261002-000123", "guest@example.com")).isNull();
+        assertThat(guestPort.findGuestPasswordHash(-1L)).isNull();
         assertThatCode(() -> guestPort.updateGuestPassword(1L, "$2a$10$dummy"))
                 .doesNotThrowAnyException();
     }
