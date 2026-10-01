@@ -120,16 +120,24 @@ public class Ticket extends BaseTimeEntity {
     private OffsetDateTime closedAt;
 
     /**
-     * 접수 시점에 확정되는 값만 받는다. category·priority·sentiment 는 AI 분류가 정하고
-     * (docs/05) status 는 항상 RECEIVED 로 시작하므로 빌더에 노출하지 않는다.
+     * 접수 시점에 확정되는 값만 받는다. priority·sentiment 는 AI 분류가 정하고(docs/05)
+     * status 는 항상 RECEIVED 로 시작하므로 빌더에 노출하지 않는다.
      *
+     * <p><b>category 는 받는다.</b> 접수 폼에서 고객이 고른 유형(FR-INQ-01)을 담을 컬럼이
+     * category 뿐이기 때문이다 — DDL 에 category_hint 같은 별도 컬럼이 없고(docs/03 §3.2),
+     * {@code TicketQueryPort.getTicketSummary} 가 LLM 프롬프트용으로 돌려주는 categoryHint 가
+     * 바로 이 값이다({@code TicketSummary} 주석의 "분류 전 기본값이면 ETC"). 고객 선택을
+     * 버리면 docs/05 §3.2 의 프롬프트 입력 한 칸이 영구히 비게 된다. AI 분류가 끝나면
+     * {@link #applyClassification} 이 이 값을 자기 판정으로 덮어쓴다.
+     *
+     * @param category           고객이 고른 유형. 고르지 않았으면 null 을 넘기고 ETC 가 된다.
      * @param firstResponseDueAt 기본 우선순위(NORMAL) 기준으로 계산한 기한.
      *                           계산은 SlaPolicy.calculateDueAt 이 수행한다.
      */
     @Builder
     private Ticket(String ticketNo, Long customerId, String guestName, String guestEmail,
             String guestPasswordHash, String title, String content, TicketChannel channel,
-            OffsetDateTime firstResponseDueAt) {
+            TicketCategory category, OffsetDateTime firstResponseDueAt) {
         this.ticketNo = ticketNo;
         this.customerId = customerId;
         this.guestName = guestName;
@@ -139,7 +147,7 @@ public class Ticket extends BaseTimeEntity {
         this.content = content;
         this.channel = channel;
         this.firstResponseDueAt = firstResponseDueAt;
-        this.category = TicketCategory.ETC;
+        this.category = category != null ? category : TicketCategory.ETC;
         this.priority = TicketPriority.NORMAL;
         this.status = TicketStatus.RECEIVED;
         this.slaWarned = false;
