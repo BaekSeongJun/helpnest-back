@@ -9,6 +9,7 @@ import com.helpnest.domain.auth.repository.RefreshTokenRepository;
 import com.helpnest.domain.member.entity.Member;
 import com.helpnest.domain.member.entity.MemberStatus;
 import com.helpnest.domain.member.repository.MemberRepository;
+import com.helpnest.domain.ticket.port.TicketGuestPort;
 import com.helpnest.global.error.BusinessException;
 import com.helpnest.infra.mail.PasswordResetMailCommand;
 import java.security.SecureRandom;
@@ -40,16 +41,19 @@ public class PasswordResetService {
     private final MemberRepository memberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TicketGuestPort ticketGuestPort;
     private final ApplicationEventPublisher events;
     private final String frontOrigin;
 
     public PasswordResetService(PasswordResetTokenRepository tokenRepository, MemberRepository memberRepository,
             RefreshTokenRepository refreshTokenRepository, PasswordEncoder passwordEncoder,
-            ApplicationEventPublisher events, @Value("${app.front-origin}") String frontOrigin) {
+            TicketGuestPort ticketGuestPort, ApplicationEventPublisher events,
+            @Value("${app.front-origin}") String frontOrigin) {
         this.tokenRepository = tokenRepository;
         this.memberRepository = memberRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
+        this.ticketGuestPort = ticketGuestPort;
         this.events = events;
         this.frontOrigin = frontOrigin;
     }
@@ -75,6 +79,30 @@ public class PasswordResetService {
                 .orElseThrow(() -> new BusinessException(AuthErrorCode.RESET_TOKEN_INVALID));
         member.changePassword(passwordEncoder.encode(newPassword));
         refreshTokenRepository.revokeAllByMemberId(memberId);
+    }
+
+    /**
+     * 비회원 조회 비밀번호 재설정 메일 (FR-AUTH-09). 티켓번호+이메일이 비회원 티켓과 맞을 때만 메일,
+     * 호출자는 결과와 무관하게 같은 200 을 준다. 메일은 입력한 주소로 보낸다 — verifyGuest 가 대소문자를
+     * 무시하고 일치를 확인했으므로 접수 때의 주소와 같은 사람이다.
+     */
+    @Transactional
+    public void requestGuestReset(String ticketNo, String email) {
+        String to = email.trim();
+        Long ticketId = ticketGuestPort.verifyGuest(ticketNo.trim(), to);
+        if (ticketId == null) {
+            return;
+        }
+        String raw = issue(TargetType.GUEST_TICKET, ticketId);
+        events.publishEvent(new PasswordResetMailCommand(to,
+                frontOrigin + "/inquiry/lookup/reset?token=" + raw, true));
+    }
+
+    /** 해싱은 여기서 — 원문 비밀번호는 박민재 포트로 넘기지 않는다 (docs/02 §5.2 TicketGuestPort) */
+    @Transactional
+    public void resetGuestPassword(String rawToken, String newPassword) {
+        Long ticketId = consume(rawToken, TargetType.GUEST_TICKET);
+        ticketGuestPort.updateGuestPassword(ticketId, passwordEncoder.encode(newPassword));
     }
 
     /** @return 메일 링크에 넣을 원문 토큰 */
