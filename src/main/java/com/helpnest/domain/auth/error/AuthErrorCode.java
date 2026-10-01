@@ -12,7 +12,11 @@ public enum AuthErrorCode implements ErrorCode {
     /** Refresh 없음·만료·폐기·재사용 → 프론트는 로그인 화면으로 */
     REFRESH_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_REFRESH_INVALID", "로그인이 만료되었습니다. 다시 로그인해 주세요."),
     /** 비회원 조회: 티켓 없음·이메일 불일치·비밀번호 오류·회원 티켓을 구분하지 않는다 (열거 방지) */
-    GUEST_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_GUEST_INVALID", "티켓번호, 이메일 또는 조회 비밀번호가 올바르지 않습니다.");
+    GUEST_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_GUEST_INVALID", "티켓번호, 이메일 또는 조회 비밀번호가 올바르지 않습니다."),
+    /** 재설정 링크: 없음·만료·이미 사용·유형 불일치를 구분하지 않는다 */
+    RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "AUTH_RESET_TOKEN_INVALID", "링크가 만료되었거나 이미 사용되었습니다. 다시 요청해 주세요."),
+    /** 비밀번호 변경 시 현재 비밀번호 불일치 */
+    PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "AUTH_PASSWORD_MISMATCH", "현재 비밀번호가 올바르지 않습니다.");
 
     private final HttpStatus status;
     private final String code;
