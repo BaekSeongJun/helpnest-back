@@ -2,6 +2,8 @@
 package com.helpnest.domain.auth.service;
 
 import com.helpnest.domain.auth.dto.AuthResponse;
+import com.helpnest.domain.auth.dto.GuestLoginRequest;
+import com.helpnest.domain.auth.dto.GuestTokenResponse;
 import com.helpnest.domain.auth.dto.LoginRequest;
 import com.helpnest.domain.auth.dto.SignupRequest;
 import com.helpnest.domain.auth.entity.RefreshToken;
@@ -13,6 +15,7 @@ import com.helpnest.domain.member.entity.MemberRole;
 import com.helpnest.domain.member.entity.MemberStatus;
 import com.helpnest.domain.member.error.MemberErrorCode;
 import com.helpnest.domain.member.repository.MemberRepository;
+import com.helpnest.domain.ticket.port.TicketGuestPort;
 import com.helpnest.global.error.BusinessException;
 import com.helpnest.global.security.JwtProperties;
 import com.helpnest.global.security.JwtProvider;
@@ -51,6 +54,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final JwtProperties jwtProperties;
+    private final TicketGuestPort ticketGuestPort;
 
     /** 컨트롤러가 body 와 Set-Cookie 를 나눠 쓰도록 함께 반환 */
     public record Tokens(AuthResponse body, String refreshToken) {
@@ -112,6 +116,22 @@ public class AuthService {
             throw new BusinessException(AuthErrorCode.INACTIVE_MEMBER);
         }
         return issue(member);
+    }
+
+    /**
+     * 비회원 조회 → Guest 토큰 (FR-AUTH-08). 티켓 없음·이메일 불일치·회원 티켓·비밀번호 오류를 모두 같은 401 로.
+     * 해시가 없어도 더미 해시와 비교해 BCrypt 비용을 똑같이 쓴다 — 응답 시간으로 조합 존재가 드러나지 않게.
+     * 대입 방지 요청 제한(IP 10분 10건)은 RateLimitFilter 가 먼저 건다.
+     */
+    public GuestTokenResponse guestLogin(GuestLoginRequest req) {
+        Long ticketId = ticketGuestPort.verifyGuest(req.ticketNo().trim(), req.email().trim());
+        String hash = ticketId == null ? null : ticketGuestPort.findGuestPasswordHash(ticketId);
+        boolean matches = passwordEncoder.matches(req.password(), hash != null ? hash : DUMMY_HASH);
+        if (hash == null || !matches) {
+            throw new BusinessException(AuthErrorCode.GUEST_INVALID);
+        }
+        return new GuestTokenResponse(jwtProvider.createGuestToken(ticketId), ticketId,
+                JwtProvider.GUEST_TTL.toSeconds());
     }
 
     /** 쿠키가 없거나 이미 무효여도 로그아웃은 성공으로 처리 */

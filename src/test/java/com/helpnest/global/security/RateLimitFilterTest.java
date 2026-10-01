@@ -52,6 +52,23 @@ class RateLimitFilterTest {
     }
 
     @Test
+    @DisplayName("비회원 조회(Guest 로그인) IP 10분 10건 초과 → 429 (조회 비밀번호 대입 방지)")
+    void guestLoginLimited() throws Exception {
+        MockHttpServletRequestBuilder guest = post("/api/auth/guest").contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"ticketNo":"HN-00000000-000000","email":"nobody@example.com","password":"0000"}
+                        """)
+                .with(r -> {
+                    r.setRemoteAddr("10.0.0.4");
+                    return r;
+                });
+        for (int i = 0; i < 10; i++) {
+            mockMvc.perform(guest).andExpect(status().isUnauthorized());
+        }
+        mockMvc.perform(guest).andExpect(status().isTooManyRequests());
+    }
+
+    @Test
     @DisplayName("비회원 첨부 업로드는 5건 제한, 로그인 사용자(Authorization 헤더)는 제외")
     void attachmentGuestOnly() throws Exception {
         for (int i = 0; i < 5; i++) {
