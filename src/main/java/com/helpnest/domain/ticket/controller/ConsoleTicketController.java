@@ -3,6 +3,9 @@ package com.helpnest.domain.ticket.controller;
 
 import java.util.List;
 
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -14,20 +17,30 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.helpnest.domain.assignment.service.AssignmentService;
 import com.helpnest.domain.ticket.dto.ClassificationUpdateRequest;
 import com.helpnest.domain.ticket.dto.ConsoleReplyCreateRequest;
 import com.helpnest.domain.ticket.dto.ReplyResponse;
+import com.helpnest.domain.ticket.dto.SlaFilter;
 import com.helpnest.domain.ticket.dto.TicketAssignRequest;
+import com.helpnest.domain.ticket.dto.TicketDetailResponse;
 import com.helpnest.domain.ticket.dto.TicketHistoryResponse;
+import com.helpnest.domain.ticket.dto.TicketListItemResponse;
+import com.helpnest.domain.ticket.dto.TicketSearchCondition;
 import com.helpnest.domain.ticket.dto.TicketStatusChangeRequest;
 import com.helpnest.domain.ticket.entity.ActorRole;
+import com.helpnest.domain.ticket.entity.TicketCategory;
+import com.helpnest.domain.ticket.entity.TicketPriority;
+import com.helpnest.domain.ticket.entity.TicketStatus;
+import com.helpnest.domain.ticket.service.ConsoleTicketService;
 import com.helpnest.domain.ticket.service.TicketClassificationService;
 import com.helpnest.domain.ticket.service.TicketReplyService;
 import com.helpnest.domain.ticket.service.TicketService;
 import com.helpnest.global.common.ApiResponse;
+import com.helpnest.global.common.PageResponse;
 import com.helpnest.global.security.JwtProvider;
 
 import jakarta.validation.Valid;
@@ -55,6 +68,54 @@ public class ConsoleTicketController {
     private final TicketClassificationService classificationService;
     private final TicketService ticketService;
     private final TicketReplyService ticketReplyService;
+    private final ConsoleTicketService consoleTicketService;
+
+    /**
+     * 티켓함 목록 검색 (docs/04 §7, 화면 CS-01). 필터 7종을 단독·조합으로 받는다.
+     *
+     * <p>기본 정렬은 SLA 임박순({@code firstResponseDueAt} 오름차순)이다 — 기한이 가까운 것을
+     * 먼저 처리해야 하고, 이 정렬이
+     * {@code idx_ticket_sla(first_response_due_at) WHERE first_responded_at IS NULL} 부분
+     * 인덱스를 탄다. {@code ?sort=} 로 다른 정렬도 받을 수 있다.
+     *
+     * <p><b>AGENT 는 본인 담당분(또는 미배정)만 본다.</b> {@code agentId} 파라미터로 남의 티켓을
+     * 조회하려 해도 서비스가 조건을 본인으로 덮어쓴다({@link ConsoleTicketService} 주석).
+     *
+     * @param unassigned true 면 미배정(담당자 없음)만. {@code agentId} 와 상호 배타이며 이쪽이 우선한다
+     */
+    @GetMapping
+    public ResponseEntity<ApiResponse<PageResponse<TicketListItemResponse>>> search(
+            @RequestParam(required = false) TicketStatus status,
+            @RequestParam(required = false) TicketPriority priority,
+            @RequestParam(required = false) TicketCategory category,
+            @RequestParam(required = false) Long agentId,
+            @RequestParam(required = false) Boolean unassigned,
+            @RequestParam(required = false) SlaFilter sla,
+            @RequestParam(required = false) String keyword,
+            @AuthenticationPrincipal Jwt jwt,
+            @PageableDefault(size = 20, sort = "firstResponseDueAt", direction = Sort.Direction.ASC)
+            Pageable pageable) {
+        TicketSearchCondition condition = new TicketSearchCondition(status, priority, category,
+                agentId, unassigned, sla, keyword);
+        return ResponseEntity.ok(ApiResponse.ok(consoleTicketService.search(condition,
+                actorRole(jwt), JwtProvider.memberId(jwt), pageable)));
+    }
+
+    /**
+     * 티켓 상세 (docs/04 §7, 화면 CS-02). 고객용과 달리 <b>내부 메모를 포함한</b> 전체 답변을
+     * 내려준다.
+     *
+     * <p>상태 이력은 이 응답에 넣지 않고 {@code GET /{id}/histories} 가 따로 제공한다 —
+     * CS-02 우측의 독립 패널이라 분리하면 상태 변경 후 이력만 다시 받을 수 있고, 상세 응답이
+     * 불필요하게 커지지 않는다.
+     *
+     * <p>담당자가 아니어도 열 수 있다. 인수인계·팀장 확인이 정상 업무이고, 쓰기 작업
+     * (상태 변경·답변)은 각 API 가 담당자 검증을 한다.
+     */
+    @GetMapping("/{ticketId}")
+    public ResponseEntity<ApiResponse<TicketDetailResponse>> detail(@PathVariable Long ticketId) {
+        return ResponseEntity.ok(ApiResponse.ok(consoleTicketService.findDetail(ticketId)));
+    }
 
     /** 수동 배정·재배정 (FR-ASN-02). 담당자가 이미 있으면 REASSIGN 이력으로 남는다 */
     @PatchMapping("/{ticketId}/assign")
