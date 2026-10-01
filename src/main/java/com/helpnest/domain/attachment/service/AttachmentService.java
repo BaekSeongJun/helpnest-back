@@ -104,10 +104,8 @@ public class AttachmentService {
     private boolean canDownload(Attachment a, Jwt jwt) {
         String role = jwt.getClaimAsString(JwtProvider.ROLE_CLAIM);
         if (JwtProvider.GUEST_ROLE.equals(role)) {
-            return a.getTicketId() != null
-                    && jwt.getClaim(JwtProvider.TICKET_ID_CLAIM) instanceof Number ticketId
-                    && ticketId.longValue() == a.getTicketId()
-                    && !isInternal(a);
+            Long guestTicketId = JwtProvider.guestTicketId(jwt);
+            return guestTicketId != null && guestTicketId.equals(a.getTicketId()) && !isInternal(a);
         }
         Long memberId = JwtProvider.memberId(jwt);
         if (memberId.equals(a.getUploadedBy()) || !"CUSTOMER".equals(role)) {
