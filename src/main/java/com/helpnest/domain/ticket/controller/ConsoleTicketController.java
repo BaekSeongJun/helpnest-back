@@ -3,6 +3,7 @@ package com.helpnest.domain.ticket.controller;
 
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -17,11 +18,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.helpnest.domain.assignment.service.AssignmentService;
 import com.helpnest.domain.ticket.dto.ClassificationUpdateRequest;
+import com.helpnest.domain.ticket.dto.ConsoleReplyCreateRequest;
+import com.helpnest.domain.ticket.dto.ReplyResponse;
 import com.helpnest.domain.ticket.dto.TicketAssignRequest;
 import com.helpnest.domain.ticket.dto.TicketHistoryResponse;
 import com.helpnest.domain.ticket.dto.TicketStatusChangeRequest;
 import com.helpnest.domain.ticket.entity.ActorRole;
 import com.helpnest.domain.ticket.service.TicketClassificationService;
+import com.helpnest.domain.ticket.service.TicketReplyService;
 import com.helpnest.domain.ticket.service.TicketService;
 import com.helpnest.global.common.ApiResponse;
 import com.helpnest.global.security.JwtProvider;
@@ -50,6 +54,7 @@ public class ConsoleTicketController {
     private final AssignmentService assignmentService;
     private final TicketClassificationService classificationService;
     private final TicketService ticketService;
+    private final TicketReplyService ticketReplyService;
 
     /** 수동 배정·재배정 (FR-ASN-02). 담당자가 이미 있으면 REASSIGN 이력으로 남는다 */
     @PatchMapping("/{ticketId}/assign")
@@ -113,6 +118,24 @@ public class ConsoleTicketController {
     public ResponseEntity<ApiResponse<List<TicketHistoryResponse>>> histories(
             @PathVariable Long ticketId) {
         return ResponseEntity.ok(ApiResponse.ok(ticketService.findHistories(ticketId)));
+    }
+
+    /**
+     * 공개 답변·내부 메모 등록 (docs/04 §7, FR-TKT-04). 담당 AGENT 또는 LEAD+ 만 —
+     * 담당자 검증은 서비스가 한다.
+     *
+     * <p>공개 답변과 내부 메모를 한 엔드포인트로 받는 것은 저장 위치와 작성 흐름이 같기
+     * 때문이고, 구분은 본문의 {@code isInternal} 이 한다. 경로를 둘로 나누면 프론트
+     * {@code ReplyEditor} 가 같은 폼을 두 번 쓰게 된다.
+     */
+    @PostMapping("/{ticketId}/replies")
+    public ResponseEntity<ApiResponse<ReplyResponse>> addReply(
+            @PathVariable Long ticketId,
+            @Valid @RequestBody ConsoleReplyCreateRequest req,
+            @AuthenticationPrincipal Jwt jwt) {
+        ReplyResponse created = ticketReplyService.addAgentReply(ticketId, req,
+                JwtProvider.memberId(jwt), actorRole(jwt));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(created));
     }
 
     /**

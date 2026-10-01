@@ -40,4 +40,20 @@ public interface MemberNameLookupRepository extends Repository<Ticket, Long> {
             where member_id in (:memberIds)
             """, nativeQuery = true)
     List<MemberName> findNames(@Param("memberIds") Collection<Long> memberIds);
+
+    /**
+     * 회원 1명의 이름. 답글 작성자처럼 한 건만 필요한 자리에서 쓴다.
+     *
+     * <p>{@link #findNames} 를 재사용하는 이유는 같은 쿼리를 두 번 적지 않기 위해서다.
+     * {@code actorId} 가 null(SYSTEM·GUEST)이면 조회하지 않고 null 을 준다.
+     */
+    default String findName(Long memberId) {
+        if (memberId == null) {
+            return null;
+        }
+        return findNames(List.of(memberId)).stream()
+                .findFirst()
+                .map(MemberName::getName)
+                .orElse(null);
+    }
 }
