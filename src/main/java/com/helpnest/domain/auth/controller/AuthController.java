@@ -3,6 +3,8 @@ package com.helpnest.domain.auth.controller;
 
 import com.helpnest.domain.auth.dto.AuthResponse;
 import com.helpnest.domain.auth.dto.GuestLoginRequest;
+import com.helpnest.domain.auth.dto.GuestPasswordResetMailRequest;
+import com.helpnest.domain.auth.dto.GuestPasswordResetRequest;
 import com.helpnest.domain.auth.dto.GuestTokenResponse;
 import com.helpnest.domain.auth.dto.LoginRequest;
 import com.helpnest.domain.auth.dto.PasswordResetMailRequest;
@@ -64,6 +66,20 @@ public class AuthController {
     @PostMapping("/password/reset")
     public ApiResponse<Void> resetPassword(@Valid @RequestBody PasswordResetRequest req) {
         passwordResetService.resetMemberPassword(req.token(), req.newPassword());
+        return ApiResponse.ok();
+    }
+
+    /** 비회원 조회 비밀번호 재설정 메일 (CU-06 ①). 티켓번호·이메일이 맞든 아니든 항상 200 (FR-AUTH-09) */
+    @PostMapping("/guest/reset-request")
+    public ApiResponse<Void> requestGuestReset(@Valid @RequestBody GuestPasswordResetMailRequest req) {
+        passwordResetService.requestGuestReset(req.ticketNo(), req.email());
+        return ApiResponse.ok();
+    }
+
+    /** 새 조회 비밀번호 (CU-06 ②) */
+    @PostMapping("/guest/reset")
+    public ApiResponse<Void> resetGuestPassword(@Valid @RequestBody GuestPasswordResetRequest req) {
+        passwordResetService.resetGuestPassword(req.token(), req.newPassword());
         return ApiResponse.ok();
     }
 
