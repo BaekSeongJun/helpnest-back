@@ -9,11 +9,11 @@ import com.helpnest.domain.ticket.entity.TicketCategory;
 import com.helpnest.global.common.PageResponse;
 import com.helpnest.global.error.BusinessException;
 import com.helpnest.global.error.CommonErrorCode;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class FaqService {
 
-    private static final Pageable SUGGEST_PAGE = PageRequest.of(0, 3, Sort.by(Sort.Direction.DESC, "viewCount"));
+    private static final int SUGGEST_LIMIT = 3;
 
     private final FaqRepository faqRepository;
 
@@ -34,12 +34,32 @@ public class FaqService {
                 FaqRepository.containsPattern(keyword), pageable).map(FaqResponse::from));
     }
 
-    /** 한 글자는 거의 모든 글에 걸려 추천 의미가 없으므로 2자부터 */
+    /**
+     * 제목을 공백으로 나눈 단어(2자 이상) 중 질문·답변에 많이 들어 있는 글 순, 같으면 조회수 순으로 최대 3건.
+     * 제목 전체를 한 덩어리로 찾으면 "환불 언제 되나요" 같은 문장은 어떤 글에도 일치하지 않는다.
+     * 한 글자 단어는 거의 모든 글에 걸려 추천 의미가 없으므로 뺀다.
+     * ponytail: 공개 글 전체를 메모리에서 채점 — FAQ 는 수십~수백 건 전제(search 와 같은 가정). 많아지면 pg_trgm/전문검색.
+     * 조사가 붙은 단어("환불은")는 일치하지 않는다 — 형태소 분석이 필요해지면 그때 검색 엔진으로.
+     */
     public List<FaqResponse> suggest(String q) {
-        if (q == null || q.trim().length() < 2) {
+        List<String> words = q == null ? List.of() : Arrays.stream(q.toLowerCase().split("\\s+"))
+                .filter(w -> w.length() >= 2).distinct().toList();
+        if (words.isEmpty()) {
             return List.of();
         }
-        return search(true, null, q, SUGGEST_PAGE).content();
+        record Scored(Faq faq, long score) {
+        }
+        return faqRepository.findByPublishedTrue().stream()
+                .map(f -> {
+                    String text = (f.getQuestion() + " " + f.getAnswer()).toLowerCase();
+                    return new Scored(f, words.stream().filter(text::contains).count());
+                })
+                .filter(s -> s.score() > 0)
+                .sorted(Comparator.comparingLong(Scored::score).reversed()
+                        .thenComparing(s -> s.faq().getViewCount(), Comparator.reverseOrder()))
+                .limit(SUGGEST_LIMIT)
+                .map(s -> FaqResponse.from(s.faq()))
+                .toList();
     }
 
     /** 공개 글 상세 + 조회수 +1. 비공개·없는 글은 같은 404 (존재 여부 비노출) */
