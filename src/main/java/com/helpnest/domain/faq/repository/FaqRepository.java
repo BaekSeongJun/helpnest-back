@@ -3,6 +3,7 @@ package com.helpnest.domain.faq.repository;
 
 import com.helpnest.domain.faq.entity.Faq;
 import com.helpnest.domain.ticket.entity.TicketCategory;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -23,6 +24,9 @@ public interface FaqRepository extends JpaRepository<Faq, Long> {
               AND (LOWER(f.question) LIKE :pattern OR LOWER(f.answer) LIKE :pattern)
             """)
     Page<Faq> search(Boolean published, TicketCategory category, String pattern, Pageable pageable);
+
+    /** 접수 폼 추천 후보 (FaqService#suggest) */
+    List<Faq> findByPublishedTrue();
 
     /** 공개 글만 +1. 동시 조회에도 누락 없이 DB 에서 증가 (벌크 UPDATE 라 updated_at 은 안 바뀜) */
     @Modifying(clearAutomatically = true)
