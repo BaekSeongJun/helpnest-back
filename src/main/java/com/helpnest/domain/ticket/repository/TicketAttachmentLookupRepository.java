@@ -33,12 +33,30 @@ public interface TicketAttachmentLookupRepository extends Repository<Ticket, Lon
     @Query(value = """
             select attachment_id as "attachmentId",
                    original_name as "originalName",
-                   size_bytes as "size"
+                   size_bytes as "size",
+                   reply_id as "replyId"
             from attachment
             where reply_id = :replyId
             order by created_at
             """, nativeQuery = true)
     List<AttachmentRow> findByReplyId(@Param("replyId") Long replyId);
+
+    /**
+     * 티켓에 달린 첨부 전부 — 본문 첨부({@code reply_id IS NULL})와 답글 첨부를 한 번에 읽는다.
+     *
+     * <p>상세 화면은 본문 첨부와 답글별 첨부를 모두 보여 주므로, 답글 수만큼 쿼리를 날리는
+     * 대신(N+1) 한 번에 읽고 {@code replyId} 로 묶는다.
+     */
+    @Query(value = """
+            select attachment_id as "attachmentId",
+                   original_name as "originalName",
+                   size_bytes as "size",
+                   reply_id as "replyId"
+            from attachment
+            where ticket_id = :ticketId
+            order by created_at
+            """, nativeQuery = true)
+    List<AttachmentRow> findByTicketId(@Param("ticketId") Long ticketId);
 
     /** 첨부 1건의 표시 정보. {@code TicketAttachmentResponse} 로 옮기기 위한 읽기 프로젝션이다. */
     interface AttachmentRow {
@@ -48,5 +66,8 @@ public interface TicketAttachmentLookupRepository extends Repository<Ticket, Lon
         String getOriginalName();
 
         long getSize();
+
+        /** 답글 첨부면 그 답글의 reply_id, 티켓 본문 첨부면 null */
+        Long getReplyId();
     }
 }

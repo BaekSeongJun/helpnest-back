@@ -4,6 +4,9 @@ package com.helpnest.domain.ticket.repository;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -83,4 +86,13 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
      */
     @Query("select t.guestPasswordHash from Ticket t where t.id = :id and t.customerId is null")
     Optional<String> findGuestPasswordHash(@Param("id") Long id);
+
+    /**
+     * 회원 고객의 문의 목록 (GET /api/tickets/my, 화면 CU-08).
+     * 정렬은 호출자가 {@code Pageable} 로 넘긴다 — 기본값은 컨트롤러의 {@code @PageableDefault} 다.
+     *
+     * <p>비회원 티켓은 customer_id 가 NULL 이라 이 조회에 걸리지 않는다. 비회원은 목록 대신
+     * Guest 토큰으로 자기 티켓 1건만 본다.
+     */
+    Page<Ticket> findByCustomerId(Long customerId, Pageable pageable);
 }
