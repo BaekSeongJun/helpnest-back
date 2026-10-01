@@ -9,8 +9,11 @@ import com.helpnest.domain.ticket.entity.TicketCategory;
 import com.helpnest.global.common.PageResponse;
 import com.helpnest.global.error.BusinessException;
 import com.helpnest.global.error.CommonErrorCode;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class FaqService {
 
+    private static final Pageable SUGGEST_PAGE = PageRequest.of(0, 3, Sort.by(Sort.Direction.DESC, "viewCount"));
+
     private final FaqRepository faqRepository;
 
     /** @param publishedOnly 고객 화면 true, 관리 화면 false(비공개 포함) */
@@ -27,6 +32,14 @@ public class FaqService {
             Pageable pageable) {
         return PageResponse.from(faqRepository.search(publishedOnly ? Boolean.TRUE : null, category,
                 FaqRepository.containsPattern(keyword), pageable).map(FaqResponse::from));
+    }
+
+    /** 한 글자는 거의 모든 글에 걸려 추천 의미가 없으므로 2자부터 */
+    public List<FaqResponse> suggest(String q) {
+        if (q == null || q.trim().length() < 2) {
+            return List.of();
+        }
+        return search(true, null, q, SUGGEST_PAGE).content();
     }
 
     /** 공개 글 상세 + 조회수 +1. 비공개·없는 글은 같은 404 (존재 여부 비노출) */

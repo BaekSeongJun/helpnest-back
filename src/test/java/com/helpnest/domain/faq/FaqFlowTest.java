@@ -132,6 +132,25 @@ class FaqFlowTest {
         assertThat(faqQueryPort.findPublishedByCategory("REFUND", null, 0)).isEmpty();
     }
 
+    @Test
+    @DisplayName("추천: 공개 글만 조회수 순 최대 3건, 2자 미만이면 빈 배열")
+    void suggest() throws Exception {
+        Faq popular = faqRepository.save(faq(TicketCategory.ETC, KW + " 인기", true));
+        faqRepository.save(faq(TicketCategory.ETC, KW + " 넷째", true));
+        faqRepository.incrementViewCount(popular.getId());
+        faqRepository.incrementViewCount(hidden.getId());   // 비공개는 +1 되지 않지만 조회수와 무관하게 제외돼야 함
+
+        mockMvc.perform(get("/api/faqs/suggest").param("q", KW))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(3))
+                .andExpect(jsonPath("$.data[0].faqId").value(popular.getId()))
+                .andExpect(jsonPath("$.data[?(@.faqId == " + hidden.getId() + ")]").isEmpty());
+        mockMvc.perform(get("/api/faqs/suggest").param("q", " 환 "))
+                .andExpect(jsonPath("$.data.length()").value(0));
+        mockMvc.perform(get("/api/faqs/suggest"))
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
     private Faq faq(TicketCategory category, String question, boolean isPublished) {
         return Faq.builder().category(category).question(question).answer("답변 " + question)
                 .published(isPublished).createdBy(lead.getId()).build();
