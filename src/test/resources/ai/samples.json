@@ -1,0 +1,38 @@
+[
+  {"title": "배송이 언제 오나요", "content": "9월 28일에 주문한 운동화가 아직 배송 준비중으로 나옵니다. 언제 출발하는지 알려주세요.", "categoryHint": "DELIVERY", "expectedCategory": "DELIVERY", "expectedSentiment": "NEUTRAL"},
+  {"title": "택배가 다른 집으로 갔어요", "content": "배송 완료라고 뜨는데 물건이 없습니다. 기사님께 연락해도 안 받으시고 벌써 세 번째 문의입니다. 정말 화가 나네요.", "categoryHint": "DELIVERY", "expectedCategory": "DELIVERY", "expectedSentiment": "NEGATIVE"},
+  {"title": "배송지 변경 가능할까요", "content": "아직 출고 전이면 배송지를 회사 주소로 바꾸고 싶어요. 연락처는 010-2345-6789 입니다.", "categoryHint": "ETC", "expectedCategory": "DELIVERY", "expectedSentiment": "NEUTRAL"},
+  {"title": "도착 예정일 문의", "content": "제주도인데 추가 배송비가 붙나요? 그리고 보통 며칠 걸리는지 궁금합니다.", "categoryHint": "DELIVERY", "expectedCategory": "DELIVERY", "expectedSentiment": "NEUTRAL"},
+  {"title": "일주일째 배송 조회가 안 돼요", "content": "운송장 번호를 넣어도 조회가 안 되고 고객센터 전화도 연결이 안 됩니다. 이런 식이면 다시는 이용 안 합니다.", "categoryHint": "DELIVERY", "expectedCategory": "DELIVERY", "expectedSentiment": "NEGATIVE"},
+
+  {"title": "환불 요청드립니다", "content": "단순 변심으로 반품하려고 합니다. 환불은 결제한 카드로 되나요?", "categoryHint": "REFUND", "expectedCategory": "REFUND", "expectedSentiment": "NEUTRAL"},
+  {"title": "환불이 2주째 안 들어옵니다", "content": "반품 회수 완료된 지 2주가 지났는데 환불이 안 됐습니다. 계속 기다리라는 답변만 반복이라 너무 짜증납니다.", "categoryHint": "REFUND", "expectedCategory": "REFUND", "expectedSentiment": "NEGATIVE"},
+  {"title": "부분 환불 문의", "content": "세트 상품 중 하나만 취소하고 싶은데 부분 환불이 가능한가요?", "categoryHint": "PAYMENT", "expectedCategory": "REFUND", "expectedSentiment": "NEUTRAL"},
+  {"title": "환불 금액이 이상해요", "content": "쿠폰 사용 금액이 빠진 채로 환불됐습니다. 차액 처리 부탁드려요. 계좌는 110-123-456789 입니다.", "categoryHint": "REFUND", "expectedCategory": "REFUND", "expectedSentiment": "NEUTRAL"},
+
+  {"title": "사이즈 교환하고 싶어요", "content": "260을 주문했는데 작아서 265로 교환하고 싶습니다. 교환 배송비는 얼마인가요?", "categoryHint": "EXCHANGE", "expectedCategory": "EXCHANGE", "expectedSentiment": "NEUTRAL"},
+  {"title": "불량품이 왔습니다", "content": "받자마자 박음질이 다 터져 있었어요. 새 제품으로 교환해 주세요. 검수를 하긴 하는 건가요?", "categoryHint": "EXCHANGE", "expectedCategory": "EXCHANGE", "expectedSentiment": "NEGATIVE"},
+  {"title": "색상 교환 문의", "content": "블랙으로 바꾸고 싶은데 재고 있나요? 택은 그대로 있습니다.", "categoryHint": "ETC", "expectedCategory": "EXCHANGE", "expectedSentiment": "NEUTRAL"},
+  {"title": "교환 상품이 또 잘못 왔어요", "content": "교환 신청해서 받은 상품이 또 다른 사이즈입니다. 두 번이나 이러니 어이가 없네요.", "categoryHint": "EXCHANGE", "expectedCategory": "EXCHANGE", "expectedSentiment": "NEGATIVE"},
+
+  {"title": "결제가 두 번 됐어요", "content": "한 번 결제했는데 카드 문자가 두 번 왔습니다. 같은 금액이 이중으로 빠져나갔어요. 빨리 확인해 주세요.", "categoryHint": "PAYMENT", "expectedCategory": "PAYMENT", "expectedSentiment": "NEGATIVE"},
+  {"title": "무통장 입금 확인 요청", "content": "어제 오후에 입금했는데 아직 입금 대기로 나옵니다. 확인 부탁드립니다.", "categoryHint": "PAYMENT", "expectedCategory": "PAYMENT", "expectedSentiment": "NEUTRAL"},
+  {"title": "할부 결제 되나요", "content": "30만원 이상 구매 시 무이자 할부 가능한 카드가 어떤 건지 알고 싶어요.", "categoryHint": "PAYMENT", "expectedCategory": "PAYMENT", "expectedSentiment": "NEUTRAL"},
+  {"title": "영수증 발급 문의", "content": "회사 경비 처리용으로 현금영수증을 사업자 번호로 다시 발급받고 싶습니다.", "categoryHint": "ETC", "expectedCategory": "PAYMENT", "expectedSentiment": "NEUTRAL"},
+
+  {"title": "로그인이 안 됩니다", "content": "비밀번호를 맞게 입력했는데 계속 로그인 실패가 뜹니다. 계정이 잠긴 건가요?", "categoryHint": "ACCOUNT", "expectedCategory": "ACCOUNT", "expectedSentiment": "NEUTRAL"},
+  {"title": "회원 탈퇴하고 싶어요", "content": "더 이상 이용하지 않아서 탈퇴하려고 합니다. 탈퇴 메뉴가 어디 있나요?", "categoryHint": "ACCOUNT", "expectedCategory": "ACCOUNT", "expectedSentiment": "NEUTRAL"},
+  {"title": "이메일 변경 문의", "content": "가입 이메일을 hong.gildong@example.com 에서 회사 메일로 바꾸고 싶습니다.", "categoryHint": "ACCOUNT", "expectedCategory": "ACCOUNT", "expectedSentiment": "NEUTRAL"},
+  {"title": "제 계정이 해킹된 것 같아요", "content": "제가 하지 않은 주문 내역이 있고 비밀번호도 바뀌어 있습니다. 너무 불안하고 화가 납니다. 당장 조치해 주세요.", "categoryHint": "ACCOUNT", "expectedCategory": "ACCOUNT", "expectedSentiment": "NEGATIVE"},
+
+  {"title": "앱이 계속 꺼져요", "content": "업데이트 이후로 앱을 켜면 바로 종료됩니다. 갤럭시 S23 사용 중입니다.", "categoryHint": "SERVICE_ERROR", "expectedCategory": "SERVICE_ERROR", "expectedSentiment": "NEUTRAL"},
+  {"title": "장바구니 오류", "content": "장바구니에 담으면 '일시적인 오류' 메시지가 뜨고 담기지 않습니다. 어제부터 몇 번을 시도했는지 모르겠네요. 진짜 짜증납니다.", "categoryHint": "ETC", "expectedCategory": "SERVICE_ERROR", "expectedSentiment": "NEGATIVE"},
+  {"title": "사이트 접속 불가", "content": "아침부터 홈페이지 접속이 안 됩니다. 세일 마지막 날인데 이게 뭡니까. 몇 시간째 아무 공지도 없네요.", "categoryHint": "SERVICE_ERROR", "expectedCategory": "SERVICE_ERROR", "expectedSentiment": "NEGATIVE"},
+  {"title": "쿠폰 적용 버튼이 안 눌려요", "content": "주문서에서 쿠폰 적용 버튼을 눌러도 반응이 없습니다. 크롬, 엣지 둘 다 똑같아요.", "categoryHint": "PAYMENT", "expectedCategory": "SERVICE_ERROR", "expectedSentiment": "NEUTRAL"},
+  {"title": "주문 내역 페이지 에러", "content": "주문 내역을 누르면 500 에러가 나옵니다. 지난번에도 말씀드렸는데 아직도 안 고쳐졌네요.", "categoryHint": "SERVICE_ERROR", "expectedCategory": "SERVICE_ERROR", "expectedSentiment": "NEGATIVE"},
+
+  {"title": "매장 위치 문의", "content": "오프라인 매장이 강남에도 있나요? 직접 보고 사고 싶어서요.", "categoryHint": "ETC", "expectedCategory": "ETC", "expectedSentiment": "NEUTRAL"},
+  {"title": "상품 재입고 알림", "content": "품절된 니트 재입고 예정이 있나요? 꼭 사고 싶어요.", "categoryHint": "ETC", "expectedCategory": "ETC", "expectedSentiment": "NEUTRAL"},
+  {"title": "상담원분 감사합니다", "content": "지난번 문의 때 친절하게 도와주셔서 감사 인사 남깁니다. 덕분에 잘 해결됐어요!", "categoryHint": "ETC", "expectedCategory": "ETC", "expectedSentiment": "POSITIVE"},
+  {"title": "제휴 제안드립니다", "content": "저희 브랜드와 협업 이벤트를 제안드리고 싶습니다. 담당 부서 연락처를 알 수 있을까요?", "categoryHint": "ETC", "expectedCategory": "ETC", "expectedSentiment": "NEUTRAL"}
+]

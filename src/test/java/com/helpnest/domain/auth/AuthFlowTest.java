@@ -8,7 +8,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.helpnest.domain.auth.repository.RefreshTokenRepository;
 import com.jayway.jsonpath.JsonPath;
+import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -17,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -33,6 +36,12 @@ class AuthFlowTest {
 
     @Autowired
     MockMvc mockMvc;
+    @Autowired
+    JdbcTemplate jdbc;
+    @Autowired
+    EntityManager em;
+    @Autowired
+    RefreshTokenRepository refreshTokenRepository;
 
     @BeforeEach
     void signup() throws Exception {
@@ -83,12 +92,46 @@ class AuthFlowTest {
         assertThat(second.getValue()).isNotEqualTo(first.getValue());
         assertThat(accessToken(rotated)).isNotBlank();
 
-        // 이미 쓴 토큰 재사용 → 거부 + 그 회원의 Refresh 전부 폐기
+        // 유예(30초)가 지난 뒤 이미 쓴 토큰 재사용 → 거부 + 그 회원의 Refresh 전부 폐기
+        ageRotation();
         MvcResult reused = refresh(first);
         assertThat(reused.getResponse().getStatus()).isEqualTo(401);
         assertThat(reused.getResponse().getContentAsString()).contains("AUTH_REFRESH_INVALID");
 
         assertThat(refresh(second).getResponse().getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    @DisplayName("회전 직후(유예 안) 옛 토큰 재사용은 응답 유실·동시 탭으로 보고 재발급, 다른 토큰은 살아 있다")
+    void reuseWithinGraceReissues() throws Exception {
+        Cookie first = login().getResponse().getCookie("refreshToken");
+        Cookie second = refresh(first).getResponse().getCookie("refreshToken");
+
+        MvcResult again = refresh(first);
+        assertThat(again.getResponse().getStatus()).isEqualTo(200);
+        assertThat(again.getResponse().getCookie("refreshToken").getValue())
+                .isNotEqualTo(second.getValue());
+        assertThat(refresh(second).getResponse().getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("일괄 폐기(탐지·비밀번호 변경 등)된 토큰은 회전 직후라도 유예 없음")
+    void bulkRevokedHasNoGrace() throws Exception {
+        Cookie first = login().getResponse().getCookie("refreshToken");
+        Cookie second = refresh(first).getResponse().getCookie("refreshToken");
+        Long memberId = jdbc.queryForObject("SELECT member_id FROM member WHERE email = ?", Long.class, EMAIL);
+        refreshTokenRepository.revokeAllByMemberId(memberId);
+
+        assertThat(refresh(first).getResponse().getStatus()).isEqualTo(401);
+        assertThat(refresh(second).getResponse().getStatus()).isEqualTo(401);
+    }
+
+    /** 이 회원의 회전 시각을 유예 밖(1분 전)으로. 테스트 트랜잭션 하나라 JPA 변경을 먼저 반영하고 캐시를 비운다 */
+    private void ageRotation() {
+        em.flush();
+        jdbc.update("UPDATE refresh_token SET rotated_at = rotated_at - INTERVAL '1 minute' WHERE rotated_at IS NOT NULL "
+                + "AND member_id = (SELECT member_id FROM member WHERE email = ?)", EMAIL);
+        em.clear();
     }
 
     @Test
