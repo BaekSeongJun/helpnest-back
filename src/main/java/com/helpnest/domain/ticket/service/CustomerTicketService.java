@@ -1,31 +1,20 @@
 // @owner PMJ
 package com.helpnest.domain.ticket.service;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.helpnest.domain.ticket.dto.ReplyResponse;
-import com.helpnest.domain.ticket.dto.TicketAttachmentResponse;
 import com.helpnest.domain.ticket.dto.TicketDetailResponse;
 import com.helpnest.domain.ticket.dto.TicketListItemResponse;
 import com.helpnest.domain.ticket.entity.Ticket;
 import com.helpnest.domain.ticket.entity.TicketReply;
 import com.helpnest.domain.ticket.error.TicketErrorCode;
-import com.helpnest.domain.ticket.repository.MemberName;
-import com.helpnest.domain.ticket.repository.MemberNameLookupRepository;
-import com.helpnest.domain.ticket.repository.TicketAttachmentLookupRepository;
-import com.helpnest.domain.ticket.repository.TicketAttachmentLookupRepository.AttachmentRow;
 import com.helpnest.domain.ticket.repository.TicketReplyRepository;
 import com.helpnest.domain.ticket.repository.TicketRepository;
 import com.helpnest.global.common.PageResponse;
@@ -52,17 +41,9 @@ import lombok.RequiredArgsConstructor;
 @Transactional(readOnly = true)
 public class CustomerTicketService {
 
-    /**
-     * 본문 첨부를 담는 맵 키. 실제 reply_id 와 겹치지 않는 음수를 쓴다.
-     * {@code HashMap} 은 null 키를 허용하지만 {@code Map.of()} 로 대체될 수 있는 자리에서는
-     * null 키 조회가 NPE 이므로 null 을 키로 쓰지 않는다.
-     */
-    private static final Long TICKET_BODY = -1L;
-
     private final TicketRepository ticketRepository;
     private final TicketReplyRepository ticketReplyRepository;
-    private final TicketAttachmentLookupRepository attachmentLookupRepository;
-    private final MemberNameLookupRepository memberNameLookupRepository;
+    private final TicketDetailAssembler assembler;
 
     /**
      * 회원 고객의 문의 목록 (GET /api/tickets/my).
@@ -75,8 +56,8 @@ public class CustomerTicketService {
      */
     public PageResponse<TicketListItemResponse> findMyTickets(Long customerId, Pageable pageable) {
         Page<Ticket> page = ticketRepository.findByCustomerId(customerId, pageable);
-        Map<Long, String> names = namesOf(page.getContent(), List.of());
-        return PageResponse.from(page.map(t -> toListItem(t, names)));
+        Map<Long, String> names = assembler.namesOf(page.getContent(), List.of());
+        return PageResponse.from(page.map(t -> assembler.toListItem(t, names)));
     }
 
     /**
@@ -108,92 +89,18 @@ public class CustomerTicketService {
         return toDetail(ticket);
     }
 
+    /**
+     * 고객용 상세. 답변은 <b>내부 메모 제외 쿼리</b>로만 읽는다 — 어떤 답변을 보여 줄지는
+     * 어셈블러가 아니라 여기서 쿼리로 결정한다({@link TicketDetailAssembler} 주석).
+     */
+    private TicketDetailResponse toDetail(Ticket ticket) {
+        return assembler.toDetail(ticket, ticketReplyRepository
+                .findByTicketIdAndIsInternalFalseOrderByCreatedAtAsc(ticket.getId()));
+    }
+
     private Ticket load(Long ticketId) {
         return ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new BusinessException(TicketErrorCode.NOT_FOUND));
     }
 
-    private TicketListItemResponse toListItem(Ticket t, Map<Long, String> names) {
-        return new TicketListItemResponse(t.getId(), t.getTicketNo(), t.getTitle(),
-                t.getCustomerId(), customerNameOf(t, names), t.getCategory(), t.getPriority(),
-                t.getSentiment(), t.getStatus(), t.getAgentId(), nameOf(names, t.getAgentId()),
-                t.getFirstResponseDueAt(), t.getFirstRespondedAt(), t.isSlaWarned(),
-                t.isSlaBreached(), t.getCreatedAt());
-    }
-
-    /**
-     * 상세 응답. 첨부는 티켓 단위로 한 번에 읽어 본문 첨부({@code replyId == null})와 답글 첨부를
-     * 나눈다 — 답글마다 조회하면 N+1 이 된다.
-     */
-    private TicketDetailResponse toDetail(Ticket t) {
-        List<TicketReply> replies = ticketReplyRepository
-                .findByTicketIdAndIsInternalFalseOrderByCreatedAtAsc(t.getId());
-        Map<Long, List<TicketAttachmentResponse>> attachments = attachmentsOf(t.getId());
-        Map<Long, String> names = namesOf(List.of(t), replies);
-
-        List<ReplyResponse> replyResponses = replies.stream()
-                .map(r -> new ReplyResponse(r.getId(), r.getWriterType(), writerNameOf(r, t, names),
-                        r.getContent(), r.isInternal(),
-                        attachments.getOrDefault(r.getId(), List.of()), r.getCreatedAt()))
-                .toList();
-
-        return new TicketDetailResponse(t.getId(), t.getTicketNo(), t.getTitle(), t.getCustomerId(),
-                customerNameOf(t, names), t.getCategory(), t.getPriority(), t.getSentiment(),
-                t.getStatus(), t.getAgentId(), nameOf(names, t.getAgentId()),
-                t.getFirstResponseDueAt(), t.getFirstRespondedAt(), t.isSlaWarned(),
-                t.isSlaBreached(), t.getCreatedAt(), t.getContent(), t.getChannel(),
-                attachments.getOrDefault(TICKET_BODY, List.of()), replyResponses,
-                t.getAssignedAt(), t.getResolvedAt(), t.getClosedAt(), t.getUpdatedAt());
-    }
-
-    /** 티켓의 첨부를 {@code reply_id} 로 묶는다. 본문 첨부는 {@link #TICKET_BODY} 키에 모은다 */
-    private Map<Long, List<TicketAttachmentResponse>> attachmentsOf(Long ticketId) {
-        Map<Long, List<TicketAttachmentResponse>> grouped = new HashMap<>();
-        for (AttachmentRow row : attachmentLookupRepository.findByTicketId(ticketId)) {
-            Long key = row.getReplyId() == null ? TICKET_BODY : row.getReplyId();
-            grouped.computeIfAbsent(key, k -> new ArrayList<>())
-                    .add(new TicketAttachmentResponse(row.getAttachmentId(), row.getOriginalName(),
-                            row.getSize()));
-        }
-        return grouped;
-    }
-
-    /** 티켓과 답변에 등장하는 회원 id 전부를 한 번에 조회한다(이력 조회와 같은 경로) */
-    private Map<Long, String> namesOf(List<Ticket> tickets, List<TicketReply> replies) {
-        Set<Long> ids = new LinkedHashSet<>();
-        tickets.forEach(t -> {
-            ids.add(t.getCustomerId());
-            ids.add(t.getAgentId());
-        });
-        replies.forEach(r -> ids.add(r.getWriterId()));
-        ids.remove(null);
-
-        if (ids.isEmpty()) {
-            return Map.of();
-        }
-        return memberNameLookupRepository.findNames(ids).stream()
-                .collect(Collectors.toMap(MemberName::getMemberId, MemberName::getName));
-    }
-
-    /** 회원이면 회원 이름, 비회원이면 접수 시 입력한 이름 */
-    private static String customerNameOf(Ticket t, Map<Long, String> names) {
-        return t.isMemberTicket() ? nameOf(names, t.getCustomerId()) : t.getGuestName();
-    }
-
-    /**
-     * 답변 작성자 이름. GUEST 는 writer_id 가 없으므로 티켓의 비회원 이름을 쓰고,
-     * SYSTEM 은 사람이 아니라 null 이다({@code ReplyResponse} 주석).
-     */
-    private static String writerNameOf(TicketReply r, Ticket t, Map<Long, String> names) {
-        return switch (r.getWriterType()) {
-            case GUEST -> t.getGuestName();
-            case SYSTEM -> null;
-            default -> nameOf(names, r.getWriterId());
-        };
-    }
-
-    /** {@code Map.of()} 는 null 키 조회에 NPE 를 던지므로 맵에 묻기 전에 거른다 */
-    private static String nameOf(Map<Long, String> names, Long memberId) {
-        return memberId == null ? null : names.get(memberId);
-    }
 }
