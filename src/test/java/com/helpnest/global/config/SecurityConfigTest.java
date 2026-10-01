@@ -61,11 +61,15 @@ class SecurityConfigTest {
                 .andExpect(jsonPath("$.error.code").value("COMMON_FORBIDDEN"));
     }
 
+    /**
+     * 404 를 기대하던 단정을 200 으로 바꿨다(박민재, 콘솔 목록 API 구현). 기존 404 는 역할 계층이
+     * 아니라 "컨트롤러가 아직 없다"는 사정이었고, 이제 통과 여부를 200 으로 직접 확인한다.
+     */
     @Test
-    @DisplayName("역할 계층: ADMIN 은 AGENT 경로를 통과한다 (컨트롤러가 없어 404)")
+    @DisplayName("역할 계층: ADMIN 은 AGENT 경로를 통과한다")
     void roleHierarchy() throws Exception {
         mockMvc.perform(get("/api/console/tickets").header(HttpHeaders.AUTHORIZATION, bearer("ADMIN")))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk());
     }
 
     @Test

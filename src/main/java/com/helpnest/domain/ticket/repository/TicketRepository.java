@@ -4,7 +4,11 @@ package com.helpnest.domain.ticket.repository;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -21,7 +25,12 @@ import jakarta.persistence.LockModeType;
  * 이 패키지에서 허용되지만 다른 도메인 테이블에 대한 쓰기는 반드시 포트를 거쳐야 한다
  * (docs/02 §5).
  */
-public interface TicketRepository extends JpaRepository<Ticket, Long> {
+/**
+ * 콘솔 목록 검색은 {@link JpaSpecificationExecutor#findAll(org.springframework.data.jpa.domain.Specification,
+ * org.springframework.data.domain.Pageable)} 에 {@code TicketSpecs.search} 를 넘겨 쓴다 —
+ * 필터 7종이 동적이라 고정 JPQL 로는 표현할 수 없다({@code TicketSpecs} 주석).
+ */
+public interface TicketRepository extends JpaRepository<Ticket, Long>, JpaSpecificationExecutor<Ticket> {
 
     /**
      * 티켓번호 일련번호를 발급한다. 시퀀스는 V202609301110__PMJ_create_ticket.sql 에서 생성한다.
@@ -83,4 +92,13 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
      */
     @Query("select t.guestPasswordHash from Ticket t where t.id = :id and t.customerId is null")
     Optional<String> findGuestPasswordHash(@Param("id") Long id);
+
+    /**
+     * 회원 고객의 문의 목록 (GET /api/tickets/my, 화면 CU-08).
+     * 정렬은 호출자가 {@code Pageable} 로 넘긴다 — 기본값은 컨트롤러의 {@code @PageableDefault} 다.
+     *
+     * <p>비회원 티켓은 customer_id 가 NULL 이라 이 조회에 걸리지 않는다. 비회원은 목록 대신
+     * Guest 토큰으로 자기 티켓 1건만 본다.
+     */
+    Page<Ticket> findByCustomerId(Long customerId, Pageable pageable);
 }
