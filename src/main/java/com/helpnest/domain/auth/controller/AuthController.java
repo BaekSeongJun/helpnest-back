@@ -2,6 +2,8 @@
 package com.helpnest.domain.auth.controller;
 
 import com.helpnest.domain.auth.dto.AuthResponse;
+import com.helpnest.domain.auth.dto.GuestLoginRequest;
+import com.helpnest.domain.auth.dto.GuestTokenResponse;
 import com.helpnest.domain.auth.dto.LoginRequest;
 import com.helpnest.domain.auth.dto.SignupRequest;
 import com.helpnest.domain.auth.service.AuthService;
@@ -39,6 +41,12 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest req) {
         return withRefreshCookie(authService.login(req));
+    }
+
+    /** 비회원 문의 조회 (CU-05). Refresh 쿠키 없이 Guest 토큰만 본문으로 */
+    @PostMapping("/guest")
+    public ApiResponse<GuestTokenResponse> guest(@Valid @RequestBody GuestLoginRequest req) {
+        return ApiResponse.ok(authService.guestLogin(req));
     }
 
     @PostMapping("/refresh")

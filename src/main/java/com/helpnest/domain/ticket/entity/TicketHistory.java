@@ -59,7 +59,10 @@ public class TicketHistory {
     @Column(length = 50)
     private String fromValue;
 
-    /** 변경 후 값. CREATE 면 NULL 이다. */
+    /**
+     * 변경 후 값. CREATE 면 접수 직후 상태인 RECEIVED 가 들어간다 — 모든 이력 행이
+     * toValue 를 채우고 있으면 상세 화면의 이력 목록을 한 가지 방식으로 렌더링할 수 있다.
+     */
     @Column(length = 50)
     private String toValue;
 

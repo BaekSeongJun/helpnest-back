@@ -1,7 +1,7 @@
 # @owner SSJ — AI 설정 (application.yml 에서 import, docs/05 §2)
 llm:
   provider: ${LLM_PROVIDER:mock}   # mock 이면 MockLlmClient
-  model: ${LLM_MODEL:}
+  model: ${LLM_MODEL:gemini-3.5-flash-lite}   # 실제 호출 모델 = TICKET_AI_RESULT.model 기록값. 선정 근거 docs/05 §6
 
 # Spring AI 자동 설정도 같은 LLM_PROVIDER 로 선택 (google-genai 일 때만 Gemini 활성)
 # mock 이면 어떤 제공자와도 일치하지 않아 비활성 → 키 없는 로컬·CI 에서도 기동
@@ -9,3 +9,8 @@ spring:
   ai:
     model:
       chat: ${LLM_PROVIDER:mock}
+    google:
+      genai:
+        chat:
+          options:
+            model: ${llm.model}

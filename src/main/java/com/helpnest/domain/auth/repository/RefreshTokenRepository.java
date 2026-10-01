@@ -11,8 +11,12 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
 
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 
-    /** 비밀번호 변경·재사용 탐지 시 전체 폐기. 벌크 update 라 영속성 컨텍스트를 비워 오래된 엔티티를 읽지 않게 한다 */
+    /**
+     * 비밀번호 변경·비활성·재사용 탐지 시 전체 폐기. rotatedAt 도 지워 회전 유예로 되살아나지 못하게 한다.
+     * 벌크 update 라 영속성 컨텍스트를 비워 오래된 엔티티를 읽지 않게 한다
+     */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("update RefreshToken t set t.revoked = true where t.memberId = :memberId and t.revoked = false")
+    @Query("update RefreshToken t set t.revoked = true, t.rotatedAt = null "
+            + "where t.memberId = :memberId and (t.revoked = false or t.rotatedAt is not null)")
     int revokeAllByMemberId(Long memberId);
 }

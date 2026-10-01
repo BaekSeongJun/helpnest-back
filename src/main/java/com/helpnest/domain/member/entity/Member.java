@@ -69,4 +69,20 @@ public class Member extends BaseTimeEntity {
     public void touchLastAssigned(OffsetDateTime at) {
         this.lastAssignedAt = at;
     }
+
+    /** 상담원이 아니게 되면 자동 배정 대상에서도 빠진다 */
+    public void changeRole(MemberRole role) {
+        this.role = role;
+        if (role != MemberRole.AGENT) {
+            this.available = false;
+        }
+    }
+
+    public void changeStatus(MemberStatus status) {
+        this.status = status;
+    }
+
+    public void changeAvailable(boolean available) {
+        this.available = available;
+    }
 }

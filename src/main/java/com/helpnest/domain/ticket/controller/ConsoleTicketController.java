@@ -1,0 +1,226 @@
+// @owner PMJ
+package com.helpnest.domain.ticket.controller;
+
+import java.util.List;
+
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.helpnest.domain.assignment.service.AssignmentService;
+import com.helpnest.domain.ticket.dto.ClassificationUpdateRequest;
+import com.helpnest.domain.ticket.dto.ConsoleReplyCreateRequest;
+import com.helpnest.domain.ticket.dto.ReplyResponse;
+import com.helpnest.domain.ticket.dto.SlaFilter;
+import com.helpnest.domain.ticket.dto.TicketAssignRequest;
+import com.helpnest.domain.ticket.dto.TicketDetailResponse;
+import com.helpnest.domain.ticket.dto.TicketHistoryResponse;
+import com.helpnest.domain.ticket.dto.TicketListItemResponse;
+import com.helpnest.domain.ticket.dto.TicketSearchCondition;
+import com.helpnest.domain.ticket.dto.TicketStatusChangeRequest;
+import com.helpnest.domain.ticket.entity.ActorRole;
+import com.helpnest.domain.ticket.entity.TicketCategory;
+import com.helpnest.domain.ticket.entity.TicketPriority;
+import com.helpnest.domain.ticket.entity.TicketStatus;
+import com.helpnest.domain.ticket.service.ConsoleTicketService;
+import com.helpnest.domain.ticket.service.TicketClassificationService;
+import com.helpnest.domain.ticket.service.TicketReplyService;
+import com.helpnest.domain.ticket.service.TicketService;
+import com.helpnest.global.common.ApiResponse;
+import com.helpnest.global.common.PageResponse;
+import com.helpnest.global.security.JwtProvider;
+
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+
+/**
+ * 상담 콘솔 티켓 API (docs/04 §7, 화면 CS-01·CS-02).
+ *
+ * <p>경로 전체가 SecurityConfig 에서 {@code hasRole("AGENT")} 로 묶여 있고 역할 계층이
+ * {@code ADMIN > LEAD > AGENT} 이므로, 메서드에 추가 제약이 없으면 상담원 이상이 호출할 수 있다.
+ *
+ * <h2>배정 API 를 LEAD+ 로 좁힌 근거</h2>
+ * {@code TicketStateMachine} 전이표(PRD 5장)는 재배정 수행자에 AGENT 를 포함하지만, PRD 2.1
+ * 권한 매트릭스와 FR-ASN-02 는 수동 배정·재배정을 LEAD/ADMIN 전용으로 규정한다. 문서 간 충돌을
+ * <b>전이표를 고치지 않고 API 권한으로 좁혀</b> 해결했다 — 전이표는 "상태 전이가 가능한가"의
+ * 권위 문서이고, "누가 그 동작을 호출할 수 있는가"는 API 계층의 책임이기 때문이다. 전이표를
+ * 고치면 채팅 배정(S3)처럼 시스템이 수행하는 전이까지 영향을 받는다.
+ */
+@RestController
+@RequestMapping("/api/console/tickets")
+@RequiredArgsConstructor
+public class ConsoleTicketController {
+
+    private final AssignmentService assignmentService;
+    private final TicketClassificationService classificationService;
+    private final TicketService ticketService;
+    private final TicketReplyService ticketReplyService;
+    private final ConsoleTicketService consoleTicketService;
+
+    /**
+     * 티켓함 목록 검색 (docs/04 §7, 화면 CS-01). 필터 7종을 단독·조합으로 받는다.
+     *
+     * <p>기본 정렬은 SLA 임박순({@code firstResponseDueAt} 오름차순)이다 — 기한이 가까운 것을
+     * 먼저 처리해야 하고, 이 정렬이
+     * {@code idx_ticket_sla(first_response_due_at) WHERE first_responded_at IS NULL} 부분
+     * 인덱스를 탄다. {@code ?sort=} 로 다른 정렬도 받을 수 있다.
+     *
+     * <p><b>AGENT 는 본인 담당분(또는 미배정)만 본다.</b> {@code agentId} 파라미터로 남의 티켓을
+     * 조회하려 해도 서비스가 조건을 본인으로 덮어쓴다({@link ConsoleTicketService} 주석).
+     *
+     * @param unassigned true 면 미배정(담당자 없음)만. {@code agentId} 와 상호 배타이며 이쪽이 우선한다
+     */
+    @GetMapping
+    public ResponseEntity<ApiResponse<PageResponse<TicketListItemResponse>>> search(
+            @RequestParam(required = false) TicketStatus status,
+            @RequestParam(required = false) TicketPriority priority,
+            @RequestParam(required = false) TicketCategory category,
+            @RequestParam(required = false) Long agentId,
+            @RequestParam(required = false) Boolean unassigned,
+            @RequestParam(required = false) SlaFilter sla,
+            @RequestParam(required = false) String keyword,
+            @AuthenticationPrincipal Jwt jwt,
+            @PageableDefault(size = 20, sort = "firstResponseDueAt", direction = Sort.Direction.ASC)
+            Pageable pageable) {
+        TicketSearchCondition condition = new TicketSearchCondition(status, priority, category,
+                agentId, unassigned, sla, keyword);
+        return ResponseEntity.ok(ApiResponse.ok(consoleTicketService.search(condition,
+                actorRole(jwt), JwtProvider.memberId(jwt), pageable)));
+    }
+
+    /**
+     * 티켓 상세 (docs/04 §7, 화면 CS-02). 고객용과 달리 <b>내부 메모를 포함한</b> 전체 답변을
+     * 내려준다.
+     *
+     * <p>상태 이력은 이 응답에 넣지 않고 {@code GET /{id}/histories} 가 따로 제공한다 —
+     * CS-02 우측의 독립 패널이라 분리하면 상태 변경 후 이력만 다시 받을 수 있고, 상세 응답이
+     * 불필요하게 커지지 않는다.
+     *
+     * <p>담당자가 아니어도 열 수 있다. 인수인계·팀장 확인이 정상 업무이고, 쓰기 작업
+     * (상태 변경·답변)은 각 API 가 담당자 검증을 한다.
+     */
+    @GetMapping("/{ticketId}")
+    public ResponseEntity<ApiResponse<TicketDetailResponse>> detail(@PathVariable Long ticketId) {
+        return ResponseEntity.ok(ApiResponse.ok(consoleTicketService.findDetail(ticketId)));
+    }
+
+    /** 수동 배정·재배정 (FR-ASN-02). 담당자가 이미 있으면 REASSIGN 이력으로 남는다 */
+    @PatchMapping("/{ticketId}/assign")
+    @PreAuthorize("hasRole('LEAD')")
+    public ResponseEntity<ApiResponse<Void>> assign(
+            @PathVariable Long ticketId,
+            @Valid @RequestBody TicketAssignRequest req,
+            @AuthenticationPrincipal Jwt jwt) {
+        assignmentService.assignTo(ticketId, req.agentId(), req.memo(), JwtProvider.memberId(jwt));
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    /**
+     * 자동 배정 재시도 (PRD 6.2). 상담원이 모두 OFF 라 미배정으로 남은 티켓을 팀장이 다시
+     * 돌릴 때 쓴다. 가용 상담원이 여전히 없으면 RECEIVED 를 유지하고 200 을 돌려준다 —
+     * 재시도 자체는 정상 처리됐고 "아직 아무도 없다"는 상태는 오류가 아니다.
+     */
+    @PostMapping("/{ticketId}/assign/auto")
+    @PreAuthorize("hasRole('LEAD')")
+    public ResponseEntity<ApiResponse<Void>> autoAssign(@PathVariable Long ticketId) {
+        assignmentService.autoAssign(ticketId);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    /**
+     * 분류 수동 수정 (docs/04 §7). 담당 AGENT 또는 LEAD+ 만 — 담당자 검증은 서비스가 한다
+     * (경로 권한만으로는 "남의 티켓인지"를 알 수 없다).
+     */
+    @PatchMapping("/{ticketId}/classification")
+    public ResponseEntity<ApiResponse<Void>> updateClassification(
+            @PathVariable Long ticketId,
+            @Valid @RequestBody ClassificationUpdateRequest req,
+            @AuthenticationPrincipal Jwt jwt) {
+        classificationService.applyManualUpdate(ticketId, req.category(), req.priority(),
+                JwtProvider.memberId(jwt), isLeadOrAbove(jwt));
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    /**
+     * 상태 변경 (docs/04 §7, FR-TKT-03). 담당 AGENT 또는 LEAD+ 만 — 담당자 검증은 티켓을 봐야
+     * 알 수 있으므로 서비스가 한다.
+     *
+     * <p>전이 가능 여부를 {@code @PreAuthorize} 로 표현하지 않는 이유는 전이표가 현재 상태에
+     * 따라 달라지기 때문이다. 권한 식에 티켓 상태를 넣으면 전이표가 두 곳으로 갈라진다.
+     */
+    @PatchMapping("/{ticketId}/status")
+    public ResponseEntity<ApiResponse<Void>> changeStatus(
+            @PathVariable Long ticketId,
+            @Valid @RequestBody TicketStatusChangeRequest req,
+            @AuthenticationPrincipal Jwt jwt) {
+        ticketService.changeStatus(ticketId, req.toStatus(), req.memo(),
+                JwtProvider.memberId(jwt), actorRole(jwt));
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    /**
+     * 상태·배정·분류 변경 이력 (docs/04 §7). 담당자가 아니어도 AGENT 이상이면 볼 수 있다 —
+     * 인수인계나 팀장 확인처럼 남의 티켓 이력을 읽어야 하는 경우가 정상 업무다.
+     */
+    @GetMapping("/{ticketId}/histories")
+    public ResponseEntity<ApiResponse<List<TicketHistoryResponse>>> histories(
+            @PathVariable Long ticketId) {
+        return ResponseEntity.ok(ApiResponse.ok(ticketService.findHistories(ticketId)));
+    }
+
+    /**
+     * 공개 답변·내부 메모 등록 (docs/04 §7, FR-TKT-04). 담당 AGENT 또는 LEAD+ 만 —
+     * 담당자 검증은 서비스가 한다.
+     *
+     * <p>공개 답변과 내부 메모를 한 엔드포인트로 받는 것은 저장 위치와 작성 흐름이 같기
+     * 때문이고, 구분은 본문의 {@code isInternal} 이 한다. 경로를 둘로 나누면 프론트
+     * {@code ReplyEditor} 가 같은 폼을 두 번 쓰게 된다.
+     */
+    @PostMapping("/{ticketId}/replies")
+    public ResponseEntity<ApiResponse<ReplyResponse>> addReply(
+            @PathVariable Long ticketId,
+            @Valid @RequestBody ConsoleReplyCreateRequest req,
+            @AuthenticationPrincipal Jwt jwt) {
+        ReplyResponse created = ticketReplyService.addAgentReply(ticketId, req,
+                JwtProvider.memberId(jwt), actorRole(jwt));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(created));
+    }
+
+    /**
+     * JWT role 클레임을 전이 판정용 {@link ActorRole} 로 바꾼다. 두 enum 은 값 집합이 달라
+     * {@code valueOf} 로 바로 변환할 수 없다 — MemberRole 의 CUSTOMER 와 비회원 GUEST 가
+     * 모두 ActorRole.CUSTOMER 로 모인다(ActorRole 주석).
+     *
+     * <p>모르는 값은 가장 권한이 낮은 CUSTOMER 로 떨어뜨린다. 이 경로는 SecurityConfig 가
+     * 이미 AGENT 이상으로 막고 있어 실제로는 도달하지 않지만, 역할이 늘었을 때 조용히
+     * 상담원 권한을 얻는 것보다 거부되는 쪽이 안전하다.
+     */
+    private static ActorRole actorRole(Jwt jwt) {
+        String role = jwt.getClaimAsString(JwtProvider.ROLE_CLAIM);
+        return switch (role == null ? "" : role) {
+            case "AGENT" -> ActorRole.AGENT;
+            case "LEAD" -> ActorRole.LEAD;
+            case "ADMIN" -> ActorRole.ADMIN;
+            default -> ActorRole.CUSTOMER;
+        };
+    }
+
+    /** 역할 계층(ADMIN > LEAD)은 Security 가 쓰고, 서비스 분기용으로는 클레임을 직접 본다 */
+    private static boolean isLeadOrAbove(Jwt jwt) {
+        String role = jwt.getClaimAsString(JwtProvider.ROLE_CLAIM);
+        return "LEAD".equals(role) || "ADMIN".equals(role);
+    }
+}

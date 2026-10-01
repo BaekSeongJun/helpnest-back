@@ -23,6 +23,20 @@ spring:
     out-of-order: true     # 3명이 각자 만든 마이그레이션을 버전 순서와 무관하게 적용
   jackson:
     time-zone: Asia/Seoul
+  task:
+    execution:            # @Async 공용 풀 (AsyncConfig)
+      thread-name-prefix: async-
+      pool:
+        core-size: 2
+        max-size: 4
+        queue-capacity: 100
+      shutdown:
+        await-termination: true          # 종료 시 진행 중인 AI 분류 등을 마치고 내려감
+        await-termination-period: 30s
+  servlet:
+    multipart:
+      max-file-size: 10MB      # 첨부 파일당 (FR-INQ-02)
+      max-request-size: 55MB   # 5개 × 10MB + 여유
 
 jwt:
   secret: ${JWT_SECRET}      # HS256 → 32바이트 이상. 운영 값은 환경변수로만
