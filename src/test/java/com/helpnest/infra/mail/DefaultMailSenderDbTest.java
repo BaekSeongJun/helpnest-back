@@ -4,6 +4,7 @@ package com.helpnest.infra.mail;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.helpnest.infra.llm.MockLlmClient;
+import java.time.OffsetDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,5 +58,27 @@ class DefaultMailSenderDbTest {
         jdbcTemplate.update("UPDATE mail_log SET created_at = NOW() - INTERVAL '11 minutes'");
         sender.sendAgentReplyMail(cmd);
         assertThat(mailLogRepository.count()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("재시도 대상: FAILED 이고 retryCount < 3 인 건만")
+    void retryTargets() {
+        for (int retries = 0; retries <= 3; retries++) {
+            MailLog mail = MailLog.builder().toEmail("r" + retries + "@example.com")
+                    .mailType(MailLog.Type.PASSWORD_RESET).subject("s").body("b").build();
+            mail.markFailed("down");
+            for (int i = 0; i < retries; i++) {
+                mail.retryFailed("down");
+            }
+            mailLogRepository.save(mail);
+        }
+        MailLog logged = MailLog.builder().toEmail("ok@example.com").mailType(MailLog.Type.PASSWORD_RESET).build();
+        logged.markDelivered(MailLog.Status.LOGGED, OffsetDateTime.now());
+        mailLogRepository.save(logged);
+
+        assertThat(mailLogRepository.findTop50ByStatusAndRetryCountLessThanOrderByIdAsc(MailLog.Status.FAILED,
+                MailRetryScheduler.MAX_RETRY))
+                .extracting(MailLog::getToEmail)
+                .containsExactly("r0@example.com", "r1@example.com", "r2@example.com");
     }
 }

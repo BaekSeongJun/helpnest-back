@@ -84,6 +84,16 @@ public class MailLog {
 
     public void markFailed(String errorMsg) {
         this.status = Status.FAILED;
-        this.errorMsg = errorMsg == null || errorMsg.length() <= 500 ? errorMsg : errorMsg.substring(0, 500);
+        this.errorMsg = truncate(errorMsg);
+    }
+
+    /** 재시도 실패: FAILED 유지 + 횟수 증가 (MailRetryScheduler) */
+    public void retryFailed(String errorMsg) {
+        this.retryCount++;
+        this.errorMsg = truncate(errorMsg);
+    }
+
+    private static String truncate(String msg) {
+        return msg == null || msg.length() <= 500 ? msg : msg.substring(0, 500);
     }
 }
