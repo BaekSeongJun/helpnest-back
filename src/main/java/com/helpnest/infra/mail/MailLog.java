@@ -25,7 +25,7 @@ public class MailLog {
 
     public enum Type { RESOLVED_SURVEY, AGENT_REPLY, PASSWORD_RESET, GUEST_PASSWORD_RESET }
 
-    /** LOGGED = 로컬(LogMailSender), 실제 발송 없음 */
+    /** LOGGED = 로컬(LogMailTransport), 실제 발송 없음 */
     public enum Status { SENT, FAILED, LOGGED }
 
     @Id
@@ -59,11 +59,31 @@ public class MailLog {
 
     private OffsetDateTime sentAt;
 
+    @Column(length = 200)
+    private String subject;
+
+    // 토큰 URL 포함 → 로그 출력 금지
+    @Column(columnDefinition = "TEXT")
+    private String body;
+
     @Builder
-    private MailLog(Long ticketId, String toEmail, Type mailType, Status status) {
+    private MailLog(Long ticketId, String toEmail, Type mailType, String subject, String body) {
         this.ticketId = ticketId;
         this.toEmail = toEmail;
         this.mailType = mailType;
+        this.subject = subject;
+        this.body = body;
+    }
+
+    /** transport 결과 반영 (SENT·LOGGED) */
+    public void markDelivered(Status status, OffsetDateTime now) {
         this.status = status;
+        this.sentAt = now;
+        this.errorMsg = null;
+    }
+
+    public void markFailed(String errorMsg) {
+        this.status = Status.FAILED;
+        this.errorMsg = errorMsg == null || errorMsg.length() <= 500 ? errorMsg : errorMsg.substring(0, 500);
     }
 }
