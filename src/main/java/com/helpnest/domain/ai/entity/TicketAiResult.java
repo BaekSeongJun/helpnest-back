@@ -85,4 +85,29 @@ public class TicketAiResult extends BaseTimeEntity {
         this.rawResponse = rawResponse;
         this.latencyMs = latencyMs;
     }
+
+    /** 재분류 성공 — 티켓당 1행이라 기존 행을 덮어쓴다 */
+    public void updateSuccess(Category category, Urgency urgency, Sentiment sentiment, String summary,
+            BigDecimal confidence, String model, String rawResponse, Integer latencyMs) {
+        this.category = category;
+        this.urgency = urgency;
+        this.sentiment = sentiment;
+        this.summary = summary;
+        this.confidence = confidence;
+        this.status = Status.SUCCESS;
+        this.model = model;
+        this.rawResponse = rawResponse;
+        this.latencyMs = latencyMs;
+    }
+
+    /** 실패 시 이전 분류값은 지워 화면에 낡은 결과가 남지 않게 한다 */
+    public void markFailed(String model, Integer latencyMs) {
+        updateSuccess(null, null, null, null, null, model, null, latencyMs);
+        this.status = Status.FAILED;
+    }
+
+    /** 상담원 수동 분류 수정 (docs/05 §3.3) */
+    public void markOverridden(Long memberId) {
+        this.overriddenBy = memberId;
+    }
 }
