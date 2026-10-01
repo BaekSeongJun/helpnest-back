@@ -18,6 +18,8 @@ import com.helpnest.global.error.ErrorCode;
 public enum TicketErrorCode implements ErrorCode {
 
     NOT_FOUND(HttpStatus.NOT_FOUND, "TICKET_NOT_FOUND", "티켓을 찾을 수 없습니다."),
+    GUEST_INFO_REQUIRED(HttpStatus.BAD_REQUEST, "TICKET_GUEST_INFO_REQUIRED",
+            "로그인하거나 비회원 정보(이름·이메일·조회 비밀번호)를 입력해 주세요."),
     INVALID_TRANSITION(HttpStatus.CONFLICT, "TICKET_INVALID_TRANSITION", "변경할 수 없는 상태입니다."),
     NOT_ASSIGNEE(HttpStatus.FORBIDDEN, "TICKET_NOT_ASSIGNEE", "담당자만 처리할 수 있습니다."),
     INVALID_CLASSIFICATION(HttpStatus.BAD_REQUEST, "TICKET_INVALID_CLASSIFICATION", "유형 또는 우선순위 값이 올바르지 않습니다."),
