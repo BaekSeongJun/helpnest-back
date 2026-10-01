@@ -4,6 +4,7 @@ package com.helpnest.global.security;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.helpnest.global.error.BusinessException;
 import java.time.Duration;
 import java.time.Instant;
 import javax.crypto.SecretKey;
@@ -70,5 +71,14 @@ class JwtProviderTest {
     void shortSecret() {
         assertThatThrownBy(() -> JwtProvider.secretKey("short")).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> JwtProvider.secretKey(null)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("memberId: Guest 토큰(sub=guest:N)은 숫자 변환 500 대신 403")
+    void memberIdRejectsGuest() {
+        Jwt guest = Jwt.withTokenValue("t").header("alg", "HS256").subject("guest:5")
+                .claim(JwtProvider.ROLE_CLAIM, JwtProvider.GUEST_ROLE).build();
+
+        assertThatThrownBy(() -> JwtProvider.memberId(guest)).isInstanceOf(BusinessException.class);
     }
 }
