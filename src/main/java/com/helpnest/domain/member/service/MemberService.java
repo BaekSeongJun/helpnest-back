@@ -1,8 +1,12 @@
 // @owner BSJ
 package com.helpnest.domain.member.service;
 
+import com.helpnest.domain.auth.error.AuthErrorCode;
+import com.helpnest.domain.auth.repository.RefreshTokenRepository;
 import com.helpnest.domain.member.dto.ConsoleAgentResponse;
 import com.helpnest.domain.member.dto.MemberResponse;
+import com.helpnest.domain.member.dto.PasswordChangeRequest;
+import com.helpnest.domain.member.dto.ProfileUpdateRequest;
 import com.helpnest.domain.member.entity.Member;
 import com.helpnest.domain.member.entity.MemberRole;
 import com.helpnest.domain.member.error.MemberErrorCode;
@@ -10,8 +14,10 @@ import com.helpnest.domain.member.repository.MemberRepository;
 import com.helpnest.global.error.BusinessException;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -19,10 +25,35 @@ import org.springframework.transaction.annotation.Transactional;
 public class MemberService {
 
     private final MemberRepository memberRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final PasswordEncoder passwordEncoder;
 
     public MemberResponse getMe(Long memberId) {
         return memberRepository.findById(memberId)
                 .map(MemberResponse::from)
+                .orElseThrow(() -> new BusinessException(MemberErrorCode.NOT_FOUND));
+    }
+
+    @Transactional
+    public MemberResponse updateProfile(Long memberId, ProfileUpdateRequest req) {
+        Member member = findOrThrow(memberId);
+        member.changeProfile(req.name().trim(), StringUtils.hasText(req.phone()) ? req.phone() : null);
+        return MemberResponse.from(member);
+    }
+
+    /** 현재 비밀번호 확인 후 교체 + Refresh 전부 폐기 (FR-AUTH-08) */
+    @Transactional
+    public void changePassword(Long memberId, PasswordChangeRequest req) {
+        Member member = findOrThrow(memberId);
+        if (!passwordEncoder.matches(req.currentPassword(), member.getPassword())) {
+            throw new BusinessException(AuthErrorCode.PASSWORD_MISMATCH);
+        }
+        member.changePassword(passwordEncoder.encode(req.newPassword()));
+        refreshTokenRepository.revokeAllByMemberId(memberId);
+    }
+
+    private Member findOrThrow(Long memberId) {
+        return memberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException(MemberErrorCode.NOT_FOUND));
     }
 
