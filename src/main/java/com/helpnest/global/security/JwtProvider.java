@@ -1,6 +1,8 @@
 // @owner BSJ
 package com.helpnest.global.security;
 
+import com.helpnest.global.error.BusinessException;
+import com.helpnest.global.error.CommonErrorCode;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -48,7 +50,11 @@ public class JwtProvider {
         return jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
     }
 
+    /** Guest 토큰(sub = guest:{ticketId})은 회원이 아니므로 회원 전용 API 에서 403 */
     public static Long memberId(Jwt jwt) {
+        if (GUEST_ROLE.equals(jwt.getClaimAsString(ROLE_CLAIM))) {
+            throw new BusinessException(CommonErrorCode.FORBIDDEN);
+        }
         return Long.valueOf(jwt.getSubject());
     }
 
