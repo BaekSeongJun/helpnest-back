@@ -10,8 +10,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * 접수 커밋 후 AI-1 분류 (docs/02 §5.1, docs/05 §3.1 1번).
- * ponytail: @EnableAsync(global/config, BSJ CR) 머지 전에는 @Async 가 무시돼 접수 스레드에서 동기 실행된다
+ * 접수 커밋 후 AI-1 분류 (docs/02 §5.1, docs/05 §3.1 1번). 스레드 풀은 global/config/AsyncConfig
  */
 @Component
 @RequiredArgsConstructor
