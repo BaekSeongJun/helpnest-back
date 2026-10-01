@@ -27,6 +27,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -44,8 +45,8 @@ import org.springframework.util.StringUtils;
 public class AuthService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
-    /** 비회원 조회 실패 경로에서도 BCrypt 한 번을 태워 응답 시간을 맞추는 용도 (TicketGuestPort 주의사항) */
-    private static final String DUMMY_HASH = new BCryptPasswordEncoder().encode("helpnest-guest-dummy");
+    /** 대상이 없을 때도 BCrypt 를 한 번 태워 응답 시간으로 존재 여부가 드러나지 않게 하는 용도 */
+    private static final String DUMMY_HASH = new BCryptPasswordEncoder().encode("helpnest-dummy");
     static final Duration ROTATION_GRACE = Duration.ofSeconds(30);
 
     private final MemberRepository memberRepository;
@@ -76,8 +77,10 @@ public class AuthService {
 
     @Transactional
     public Tokens login(LoginRequest req) {
-        Member member = memberRepository.findByEmail(req.email())
-                .filter(m -> passwordEncoder.matches(req.password(), m.getPassword()))
+        // 없는 이메일도 더미 해시와 비교한다 — 건너뛰면 응답이 빨라져 가입 여부가 드러난다
+        Optional<Member> found = memberRepository.findByEmail(req.email());
+        boolean matches = passwordEncoder.matches(req.password(), found.map(Member::getPassword).orElse(DUMMY_HASH));
+        Member member = found.filter(m -> matches)
                 .orElseThrow(() -> new BusinessException(AuthErrorCode.INVALID_CREDENTIALS));
         if (member.getStatus() == MemberStatus.INACTIVE) {
             throw new BusinessException(AuthErrorCode.INACTIVE_MEMBER);
