@@ -1,11 +1,11 @@
 -- @owner BSJ
--- FAQ 시드: 유형별 3개 (docs/03 §5). 템플릿은 S2 에서 이 파일에 추가.
+-- FAQ 시드: 유형별 3개, 템플릿 시드: 2개 (docs/03 §5).
 -- local 프로필에서만 적용 (application-local.yml flyway.locations)
 --
 -- 파일 이름이 R__seed_BSJ_member 보다 "뒤"여야 한다: Repeatable 은 설명(description) 알파벳 순으로 실행되고,
 -- created_by 가 admin 계정을 참조하므로 빈 DB(CI)에서 회원 시드가 먼저 돌아야 한다. (faq_… 로 두면 먼저 실행돼 0건)
 --
--- faq 에는 유니크 키가 없어 ON CONFLICT 대신 같은 질문이 없을 때만 넣는다 → 여러 번 실행해도 안전
+-- faq·template 에는 유니크 키가 없어 ON CONFLICT 대신 같은 질문이 없을 때만 넣는다 → 여러 번 실행해도 안전
 INSERT INTO faq (category, question, answer, created_by)
 SELECT v.category, v.question, v.answer, m.member_id
 FROM (VALUES
@@ -60,3 +60,15 @@ FROM (VALUES
 ) AS v(category, question, answer)
 JOIN member m ON m.email = 'admin@helpnest.local'
 WHERE NOT EXISTS (SELECT 1 FROM faq f WHERE f.question = v.question);
+
+-- 답변 템플릿 2개. {고객명}·{티켓번호} 는 TemplatePicker 가 삽입할 때 치환
+INSERT INTO template (category, title, content, created_by)
+SELECT v.category, v.title, v.content, m.member_id
+FROM (VALUES
+  ('DELIVERY', '배송 지연 안내',
+   E'안녕하세요, {고객명}님. HelpNest 고객센터입니다.\n\n문의하신 주문({티켓번호})의 배송이 늦어져 불편을 드려 죄송합니다. 택배사에 확인한 결과 현재 배송 중이며, 1~2일 안에 받으실 수 있을 예정입니다.\n\n추가로 궁금하신 점이 있으면 이 문의에 답글로 남겨 주세요.'),
+  ('REFUND', '환불 접수 완료 안내',
+   E'안녕하세요, {고객명}님. HelpNest 고객센터입니다.\n\n요청하신 환불({티켓번호})이 접수되었습니다. 반품 상품 입고·검수 후 영업일 기준 3일 안에 결제 수단으로 환불되며, 카드사에 따라 반영까지 3~5일이 더 걸릴 수 있습니다.\n\n감사합니다.')
+) AS v(category, title, content)
+JOIN member m ON m.email = 'admin@helpnest.local'
+WHERE NOT EXISTS (SELECT 1 FROM template t WHERE t.title = v.title);
