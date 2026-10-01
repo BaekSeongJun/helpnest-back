@@ -1,10 +1,17 @@
 // @owner PMJ
 package com.helpnest.domain.ticket.repository;
 
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.helpnest.domain.ticket.entity.Ticket;
+
+import jakarta.persistence.LockModeType;
 
 /**
  * 티켓 조회·저장.
@@ -25,4 +32,31 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
      */
     @Query(value = "SELECT nextval('ticket_no_seq')", nativeQuery = true)
     long nextTicketNoSeq();
+
+    /**
+     * 배정·분류 반영용 비관적 락 조회 (SELECT ... FOR UPDATE).
+     *
+     * <p>자동 배정은 "읽고 → 판단하고 → 쓰는" 흐름이라 같은 티켓에 두 번 돌면 나중 것이 앞의
+     * 배정을 덮어쓴다. AI 분류 리스너는 비동기이고 팀장의 수동 배정은 사람이 아무 때나 누르므로
+     * 두 흐름이 겹칠 수 있다. 티켓 1행을 잠가 직렬화한다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select t from Ticket t where t.id = :id")
+    Optional<Ticket> findByIdForUpdate(@Param("id") Long id);
+
+    /**
+     * 상담원별 처리 중 티켓 수 (PRD 6.2 최소 부하 배정의 입력).
+     *
+     * <p>한 건도 없는 상담원은 결과에 나오지 않는다(group by 특성) — 호출자가 0 으로 채워야 한다.
+     * 결과를 0 으로 채우는 쪽이 쿼리에 outer join 을 넣는 것보다 단순하다.
+     */
+    @Query("""
+            select new com.helpnest.domain.ticket.repository.AgentLoad(t.agentId, count(t))
+            from Ticket t
+            where t.agentId in :agentIds and t.status in (
+                com.helpnest.domain.ticket.entity.TicketStatus.ASSIGNED,
+                com.helpnest.domain.ticket.entity.TicketStatus.IN_PROGRESS)
+            group by t.agentId
+            """)
+    List<AgentLoad> countActiveByAgentIds(@Param("agentIds") List<Long> agentIds);
 }
