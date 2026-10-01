@@ -24,6 +24,9 @@ import org.springframework.stereotype.Component;
 public class JwtProvider {
 
     public static final String ROLE_CLAIM = "role";
+    /** 비회원 조회용 Guest 토큰: role = GUEST, ticketId 클레임 (docs/02, S1-5 에서 발급) */
+    public static final String GUEST_ROLE = "GUEST";
+    public static final String TICKET_ID_CLAIM = "ticketId";
 
     private final JwtEncoder jwtEncoder;
     private final Duration accessTtl;
