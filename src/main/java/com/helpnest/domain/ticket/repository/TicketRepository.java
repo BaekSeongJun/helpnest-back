@@ -59,4 +59,28 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
             group by t.agentId
             """)
     List<AgentLoad> countActiveByAgentIds(@Param("agentIds") List<Long> agentIds);
+
+    /**
+     * 티켓번호 + 비회원 이메일로 비회원 티켓을 찾는다 ({@code TicketGuestPort.verifyGuest}).
+     *
+     * <p>{@code lower()} 로 비교하는 이유는 DDL 의 {@code idx_ticket_guest_email} 이
+     * {@code lower(guest_email)} 부분 인덱스이기 때문이다. 한쪽만 lower() 를 쓰면 인덱스를 타지 않는다.
+     *
+     * <p>{@code customerId is null} 로 회원 티켓을 제외한다 — 회원 티켓에는 조회 비밀번호가 없어
+     * 비회원 인증 대상이 아니다.
+     */
+    @Query("""
+            select t.id from Ticket t
+            where t.ticketNo = :ticketNo
+              and lower(t.guestEmail) = lower(:email)
+              and t.customerId is null
+            """)
+    Optional<Long> findGuestTicketId(@Param("ticketNo") String ticketNo, @Param("email") String email);
+
+    /**
+     * 비회원 티켓의 조회 비밀번호 BCrypt 해시 ({@code TicketGuestPort.findGuestPasswordHash}).
+     * 회원 티켓이면 결과가 없다.
+     */
+    @Query("select t.guestPasswordHash from Ticket t where t.id = :id and t.customerId is null")
+    Optional<String> findGuestPasswordHash(@Param("id") Long id);
 }
