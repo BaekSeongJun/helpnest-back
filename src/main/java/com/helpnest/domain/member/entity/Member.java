@@ -85,4 +85,15 @@ public class Member extends BaseTimeEntity {
     public void changeAvailable(boolean available) {
         this.available = available;
     }
+
+    /** @param passwordHash BCrypt 해시. Refresh 폐기는 호출자가 함께 한다 */
+    public void changePassword(String passwordHash) {
+        this.password = passwordHash;
+    }
+
+    /** 내 정보 수정 (CU-10). 이메일·역할은 바꾸지 않는다 */
+    public void changeProfile(String name, String phone) {
+        this.name = name;
+        this.phone = phone;
+    }
 }
