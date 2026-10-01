@@ -1,12 +1,14 @@
 // @owner BSJ
 package com.helpnest.domain.member.service;
 
+import com.helpnest.domain.member.dto.ConsoleAgentResponse;
 import com.helpnest.domain.member.dto.MemberResponse;
 import com.helpnest.domain.member.entity.Member;
 import com.helpnest.domain.member.entity.MemberRole;
 import com.helpnest.domain.member.error.MemberErrorCode;
 import com.helpnest.domain.member.repository.MemberRepository;
 import com.helpnest.global.error.BusinessException;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,5 +36,10 @@ public class MemberService {
         }
         member.changeAvailable(available);
         return MemberResponse.from(member);
+    }
+
+    /** 배정 드롭다운용 활성 상담원 + 처리 중 건수 (CR #44) */
+    public List<ConsoleAgentResponse> findConsoleAgents() {
+        return memberRepository.findConsoleAgents().stream().map(ConsoleAgentResponse::from).toList();
     }
 }
