@@ -23,6 +23,23 @@ public interface TicketGuestPort {
     Long verifyGuest(String ticketNo, String email);
 
     /**
+     * 비회원 티켓의 조회 비밀번호 BCrypt 해시를 돌려준다.
+     *
+     * <p>원문 비밀번호를 받아 내가 비교하지 않고 해시를 넘기는 이유는
+     * {@link #updateGuestPassword} 와 대칭을 맞추기 위해서다. 그쪽이 해시를 <b>받고</b> 이쪽이
+     * 해시를 <b>주므로</b> BCrypt 인코더와 비밀번호 정책이 호출자(백성준) 한 곳에만 남는다.
+     * 반대로 원문을 받으면 비밀번호가 도메인 경계를 넘고 해싱 정책이 두 곳으로 갈라진다.
+     *
+     * <p><b>호출자 주의</b>: 반환이 null 이어도 더미 해시와 한 번 비교해야 한다. BCrypt 는
+     * 의도적으로 느려서 비교를 건너뛰면 응답 시간 차이로 "그 티켓번호+이메일 조합이 있다"는
+     * 사실이 드러난다({@link #verifyGuest} 가 예외를 던지지 않는 것과 같은 이유).
+     *
+     * @param ticketId {@link #verifyGuest} 로 확인한 티켓
+     * @return BCrypt 해시. 회원 티켓이거나 티켓이 없으면 {@code null}
+     */
+    String findGuestPasswordHash(Long ticketId);
+
+    /**
      * 비회원 조회 비밀번호를 교체한다.
      *
      * @param ticketId     {@link #verifyGuest} 로 확인한 티켓
