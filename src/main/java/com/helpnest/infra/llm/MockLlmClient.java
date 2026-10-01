@@ -42,6 +42,11 @@ public class MockLlmClient implements LlmClient {
                 summary(text), 0.5));
     }
 
+    @Override
+    public String modelName() {
+        return "mock";
+    }
+
     private static Category category(String text) {
         return CATEGORY_RULES.stream()
                 .filter(rule -> containsAny(text, rule.getValue()))
