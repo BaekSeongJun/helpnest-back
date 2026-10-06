@@ -71,6 +71,11 @@ public class Survey {
         }
     }
 
+    /** SurveyRepository.markSubmitted 의 조건(expires_at > now)과 같은 기준 — 어긋나면 사전 검사와 UPDATE 가 갈린다 */
+    public boolean isExpired(OffsetDateTime now) {
+        return !expiresAt.isAfter(now);
+    }
+
     private void issue(String token, OffsetDateTime now) {
         this.token = token;
         this.sentAt = now;
