@@ -26,7 +26,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  *
  * <p>허용 역할은 401·403 이 아니면 통과(없는 id·빈 본문이라 404·400 이 나와도 권한은 통과한 것),
  * 금지 역할은 비로그인 401 · 로그인했으나 역할 부족 403 이어야 한다. 존재하지 않는 id 로만 쳐서
- * 데이터가 바뀌지 않는다. 채팅·알림·SLA 관리·고객 이력은 아직 dev 에 없어 구현되면 행을 추가한다.
+ * 데이터가 바뀌지 않는다. 채팅·SLA 관리·고객 이력은 아직 dev 에 없어 구현되면 행을 추가한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -62,6 +62,10 @@ class RoleAccessMatrixTest {
                 row("POST", "/api/tickets", "{}", ALL),
                 // 로그인 회원 (Guest 토큰은 티켓 1건 전용이라 회원 API 는 막힌다)
                 row("GET", "/api/members/me", MEMBERS),
+                row("GET", "/api/notifications", MEMBERS),
+                row("GET", "/api/notifications/unread-count", MEMBERS),
+                row("PATCH", "/api/notifications/" + NO_SUCH_ID + "/read", MEMBERS),
+                row("PATCH", "/api/notifications/read-all", MEMBERS),
                 // 04 는 CUSTOMER 전용인데 현재는 로그인 회원 누구나 200 이다(직원은 본인 소유가 없어 빈 목록 —
                 // 남의 데이터는 나오지 않는다). 박민재가 CUSTOMER 로 좁히면 이 행이 실패하니 CUSTOMER 만으로 바꾼다
                 row("GET", "/api/tickets/my", MEMBERS),
