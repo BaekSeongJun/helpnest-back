@@ -61,6 +61,18 @@ public class SlaPolicy {
     }
 
     /**
+     * 관리자가 정책을 고친다 (PRD 6.1, PUT /api/admin/sla-policies/{priority}).
+     *
+     * <p><b>이미 접수된 티켓의 기한은 그대로 둔다.</b> first_response_due_at 은 접수 시점에
+     * 확정된 약속이라 정책을 바꿨다고 소급해서 바꾸면, 어제까지 여유 있던 티켓이 갑자기 위반으로
+     * 뒤집히고 {@code SlaScheduler} 가 과거분까지 한꺼번에 알린다. 재계산은 우선순위가 바뀔 때만
+     * 한다({@code Ticket.updateFirstResponseDueAt} 주석).
+     */
+    public void update(int responseMinutes, BigDecimal warningRatio) {
+        this.responseMinutes = responseMinutes;
+        this.warningRatio = warningRatio;
+    }
+    /**
      * 첫 응답 기한을 계산한다. TICKET.first_response_due_at 에 넣는 값이다.
      *
      * <p>PRD 6.1 의 {@code created_at + response_minutes * INTERVAL '1 minute'} 을 옮긴 것으로,
@@ -84,10 +96,19 @@ public class SlaPolicy {
      * @return 임박 알림 시각
      */
     public OffsetDateTime calculateWarningAt(OffsetDateTime createdAt) {
-        long warningMinutes = warningRatio
+        return createdAt.plusMinutes(warningMinutes());
+    }
+
+    /**
+     * 접수부터 임박까지의 분. <b>비율 곱셈과 반올림은 여기 한 곳에만 있다</b> —
+     * {@link #calculateWarningAt}, {@code TicketSpecs.warningCutoff}(목록 배지),
+     * {@code SlaPolicyResponse}(관리 화면)가 모두 이 값을 쓴다. 세 군데가 각자 계산하면
+     * 반올림이 1분만 어긋나도 화면과 알림이 서로 다른 말을 하게 된다.
+     */
+    public long warningMinutes() {
+        return warningRatio
                 .multiply(BigDecimal.valueOf(responseMinutes))
                 .setScale(0, RoundingMode.HALF_UP)
                 .longValueExact();
-        return createdAt.plusMinutes(warningMinutes);
     }
 }

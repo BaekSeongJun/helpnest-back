@@ -1,6 +1,8 @@
 // @owner PMJ
 package com.helpnest.domain.ticket.repository;
 
+import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -14,6 +16,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.helpnest.domain.ticket.entity.Ticket;
+import com.helpnest.domain.ticket.entity.TicketPriority;
+import com.helpnest.domain.ticket.entity.TicketStatus;
 
 import jakarta.persistence.LockModeType;
 
@@ -101,4 +105,47 @@ public interface TicketRepository extends JpaRepository<Ticket, Long>, JpaSpecif
      * Guest 토큰으로 자기 티켓 1건만 본다.
      */
     Page<Ticket> findByCustomerId(Long customerId, Pageable pageable);
+
+    /**
+     * 첫 응답 기한을 넘긴 미응답 티켓 ({@code SlaScheduler}).
+     *
+     * <p>위반은 우선순위와 무관하게 {@code first_response_due_at} 한 컴럼만 보면 된다 —
+     * 기한 자체가 이미 정책을 반영해 계산된 값이다. 임박과 달리 정책별로 나눌 필요가 없다.
+     *
+     * <p>{@code slaBreached = false} 로 이미 알린 건을 제외한다. 플래그는 되돌리지 않으므로
+     * ({@code Ticket.markSlaBreached}) 티켓당 알림은 정확히 한 번이다.
+     */
+    @Query("""
+            select t from Ticket t
+            where t.slaBreached = false
+              and t.firstRespondedAt is null
+              and t.firstResponseDueAt < :now
+              and t.status not in :doneStatuses
+            """)
+    List<Ticket> findSlaBreachTargets(@Param("now") OffsetDateTime now,
+            @Param("doneStatuses") Collection<TicketStatus> doneStatuses);
+
+    /**
+     * 임박 시각을 지났지만 아직 기한은 남은 미응답 티켓 ({@code SlaScheduler}).
+     *
+     * <p>임박 시각은 우선순위마다 다르므로 호출자가 정책 하나씩 넘긴다. 전달받는
+     * {@code warningCutoff} 는 {@code TicketSpecs.warningCutoff} 가 계산한 단일 기준이다 —
+     * 콘솔 목록의 임박 배지와 같은 식을 써야 "목록은 임박인데 알림은 안 오는" 상태가 없다.
+     *
+     * <p>{@code firstResponseDueAt >= now} 로 이미 기한을 넘긴 건을 빼는다. 위반 조회가 가져가므로
+     * 한 티켓이 같은 회차에 임박과 위반을 두 번 받지 않는다.
+     */
+    @Query("""
+            select t from Ticket t
+            where t.slaWarned = false
+              and t.firstRespondedAt is null
+              and t.priority = :priority
+              and t.createdAt <= :warningCutoff
+              and t.firstResponseDueAt >= :now
+              and t.status not in :doneStatuses
+            """)
+    List<Ticket> findSlaWarningTargets(@Param("priority") TicketPriority priority,
+            @Param("warningCutoff") OffsetDateTime warningCutoff,
+            @Param("now") OffsetDateTime now,
+            @Param("doneStatuses") Collection<TicketStatus> doneStatuses);
 }
