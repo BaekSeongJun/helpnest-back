@@ -23,8 +23,8 @@ import com.helpnest.global.error.BusinessException;
  * <p>인터페이스 타입으로 주입받는 것이 핵심이다. 구현체 타입으로 받으면 S1 에 구현이 교체될 때
  * 테스트가 함께 깨져 배선 검증의 의미가 없어진다.
  *
- * <p><b>S1 현재 상태:</b> {@code updateGuestPassword}(S2 예정)를 뺀 나머지는 모두 실구현으로
- * 교체됐다. 그래서 검증 내용이 포트마다 다르다 — 실구현 포트는 "실제 계약"을, 스텁 포트는
+ * <p><b>S2 현재 상태:</b> {@code NotificationPort} 를 뺀 나머지는 모두 실구현으로 교체됐다.
+ * 그래서 검증 내용이 포트마다 다르다 — 실구현 포트는 "실제 계약"을, 스텁 포트는
  * "호출해도 터지지 않음"을 본다. 실제 동작은 각각
  * {@code TicketClassificationFlowTest}·{@code CustomerTicketApiTest}·{@code TicketGuestPortTest}
  * 가 실제 티켓으로 검증하고, 여기서는 배선만 본다.
