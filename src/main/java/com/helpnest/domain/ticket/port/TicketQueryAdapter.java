@@ -94,7 +94,7 @@ public class TicketQueryAdapter implements TicketQueryPort {
                 .orElseThrow(() -> new BusinessException(TicketErrorCode.NOT_FOUND));
 
         String lastPublicReply = ticketReplyRepository
-                .findFirstByTicketIdAndWriterTypeAndIsInternalFalseOrderByCreatedAtDesc(
+                .findFirstByTicketIdAndWriterTypeAndIsInternalFalseOrderByCreatedAtDescIdDesc(
                         ticketId, WriterType.AGENT)
                 .map(TicketReply::getContent)
                 .orElse(null);

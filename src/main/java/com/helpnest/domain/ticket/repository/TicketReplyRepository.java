@@ -73,8 +73,15 @@ public interface TicketReplyRepository extends JpaRepository<TicketReply, Long> 
      * 인자로 받는 것은 파생 쿼리가 enum 상수를 이름에 담을 수 없어서이며, 호출부는
      * {@code WriterType.AGENT} 한 곳뿐이다.
      *
+     * <h2>{@code IdDesc} 를 빼지 말 것</h2>
+     * {@code createdAt} 은 {@code @CreationTimestamp} 로 채워지고 시계 해상도 때문에 연속
+     * insert 두 건이 <b>같은 값을 받을 수 있다</b>. 그러면 {@code CreatedAtDesc} 만으로는
+     * 정렬이 비결정적이 되어 더 오래된 답변이 뽑힌다(TicketQueryPortTest 가 실제로 이걸 잡았다).
+     * 운영에서도 상담원이 더블클릭·재시도로 같은 순간에 두 건을 저장하면 고객 메일에 이전
+     * 답변이 인용된다. reply_id 는 시퀀스라 단조 증가하므로 동률을 확실히 가른다.
+     *
      * @return 공개 답변 없이 해결된 티켓이면 {@code Optional.empty()}
      */
-    Optional<TicketReply> findFirstByTicketIdAndWriterTypeAndIsInternalFalseOrderByCreatedAtDesc(
+    Optional<TicketReply> findFirstByTicketIdAndWriterTypeAndIsInternalFalseOrderByCreatedAtDescIdDesc(
             Long ticketId, WriterType writerType);
 }

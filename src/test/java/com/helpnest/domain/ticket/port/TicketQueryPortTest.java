@@ -129,8 +129,13 @@ class TicketQueryPortTest {
     @DisplayName("lastPublicReply")
     class LastPublicReply {
 
+        /**
+         * 두 답변이 한 트랜잭션에서 저장되어 {@code created_at} 이 같은 값을 받을 수 있다
+         * ({@code @CreationTimestamp} + 시계 해상도). 그래서 이 테스트는 정렬 동률까지 함께
+         * 검증한다 — Repository 쿼리의 {@code IdDesc} 타이브레이커가 빠지면 여기서 깨진다.
+         */
         @Test
-        @DisplayName("가장 최근 상담원 공개 답변을 원문 그대로 준다 — 요약은 메일 쪽 책임")
+        @DisplayName("가장 최근 상담원 공개 답변을 원문 그대로 준다 — created_at 동률이어도 뒤에 쓴 것")
         void returnsLatestPublicAgentReply() {
             Ticket ticket = givenGuestTicket();
             givenReply(ticket, WriterType.AGENT, false, "첫 번째 답변입니다.");
