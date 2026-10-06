@@ -1,9 +1,13 @@
 // @owner PMJ
 package com.helpnest.domain.notification.port;
 
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import com.helpnest.domain.notification.dto.NotificationPayload;
 import com.helpnest.domain.notification.entity.Notification;
 import com.helpnest.domain.notification.entity.NotificationType;
 import com.helpnest.domain.notification.repository.NotificationRepository;
@@ -14,14 +18,14 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * 웹 알림 저장. 호출자는 백성준·신수진이며 포트 하나로 들어온다(docs/02 §5.2).
  *
- * <p>S0~S1 동안 이 어댑터는 로그만 남기는 스텁이었다. 이제 저장이 실구현됐으므로
- * {@code AssignmentService} 의 UNASSIGNED 알림 같은 기존 호출은 <b>호출처 수정 없이</b>
- * 그대로 notification 행을 남긴다.
+ * <p>S0~S1 동안 이 어댑터는 로그만 남기는 스텁이었다. 이제 저장과 실시간 발송이 모두
+ * 실구현이므로 {@code AssignmentService} 의 UNASSIGNED 알림 같은 기존 호출은
+ * <b>호출처 수정 없이</b> notification 행을 남기고 벨까지 띄운다.
  *
- * <p>TODO(PMJ) 발송만 남음 — 저장 후 {@code SimpMessagingTemplate} 으로
- * {@code /user/queue/notifications} 에 보내는 한 줄을 {@link #notify} 끝에 추가한다
- * (docs/02 §6). WebSocket 설정(STOMP 엔드포인트·JWT 인터셉터)이 선행이라 별도 태스크다.
- * 저장이 이미 되고 있으므로 발송이 늦어도 알림은 유실되지 않고, 벨을 새로 열면 보인다.
+ * <h2>저장이 먼저, 발송은 부가다</h2>
+ * 발송 실패는 저장을 되돌리지 않는다. 행이 남아 있으면 벨을 새로 열 때 REST 조회
+ * (docs/04 §9)로 보이므로 알림이 유실되지 않는다. 반대로 저장이 실패하면 보낼 내용 자체가
+ * 없으므로 발송도 하지 않는다.
  *
  * <h2>호출자에게 예외를 올리지 않는다</h2>
  * 반환형이 void 라 호출자는 실패를 알 방법이 없고, 애초에 알림 실패로 배정·답변 같은 업무가
@@ -50,6 +54,7 @@ import lombok.extern.slf4j.Slf4j;
 public class NotificationAdapter implements NotificationPort {
 
     private final NotificationRepository notificationRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
     /**
      * {@inheritDoc}
@@ -74,20 +79,67 @@ public class NotificationAdapter implements NotificationPort {
             return;
         }
 
+        Notification saved;
         try {
-            Notification saved = notificationRepository.save(Notification.builder()
+            saved = notificationRepository.save(Notification.builder()
                     .receiverId(receiverId)
                     .type(parsed)
                     .ticketId(ticketId)
                     .message(truncate(message))
                     .build());
-            log.debug("[noti] 저장 notificationId={} receiverId={} type={} ticketId={}",
-                    saved.getId(), receiverId, parsed, ticketId);
         } catch (RuntimeException e) {
             // 알림 문구는 고객 정보를 담을 수 있어 로그에 남기지 않는다(docs/10 §3.3).
             // 여기서 삼켜도 호출자 트랜잭션은 이미 롤백 표시가 됐다(클래스 주석) — 로그는
             // "알림 때문에 업무가 실패했다"를 추적할 단서로만 남긴다.
             log.error("[noti] 저장 실패 receiverId={} type={} ticketId={}", receiverId, parsed, ticketId, e);
+            return;
+        }
+        log.debug("[noti] 저장 notificationId={} receiverId={} type={} ticketId={}",
+                saved.getId(), receiverId, parsed, ticketId);
+        push(saved);
+    }
+
+    /**
+     * 개인 큐로 실시간 발송한다 (docs/02 §6, docs/04 §11).
+     *
+     * <p><b>트랜잭션이 열려 있으면 커밋 이후로 미룬다.</b> 이 메서드는 호출자 트랜잭션에
+     * 참여하므로(클래스 주석) 저장 직후 바로 보내면 <b>커밋 전에 클라이언트가 알림을 받는다</b>.
+     * 호출자가 뒤에서 실패해 롤백하면 벨에는 떠 있는데 REST 조회에는 없는 알림이 되고, 사용자가
+     * 눌러도 아무것도 나오지 않는다. 롤백되면 {@code afterCommit} 은 호출되지 않으므로 그 상태가
+     * 아예 만들어지지 않는다.
+     *
+     * <p>트랜잭션 밖에서 호출되는 경로(테스트, 커밋 후 이벤트 리스너)는 이미 확정된 상태라
+     * 그대로 보낸다.
+     */
+    private void push(Notification notification) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    doPush(notification);
+                }
+            });
+            return;
+        }
+        doPush(notification);
+    }
+
+    /**
+     * 발송 실패를 호출자에게 올리지 않는다. 커밋 이후에 도는 경로에서 예외를 던지면 이미 끝난
+     * 업무 트랜잭션을 되돌릴 수도 없으면서 로그만 지저분해진다. 저장은 이미 끝났으므로
+     * 알림 자체는 남아 있다.
+     *
+     * <p>목적지에 {@code /user} 를 붙이지 않는다 — {@code convertAndSendToUser} 가
+     * {@code userDestinationPrefix} 를 붙여 세션별 실제 목적지로 바꾼다. 여기에 직접
+     * {@code /user/queue/...} 를 적으면 경로가 두 번 붙어 아무도 받지 못한다.
+     */
+    private void doPush(Notification notification) {
+        try {
+            messagingTemplate.convertAndSendToUser(String.valueOf(notification.getReceiverId()),
+                    "/queue/notifications", NotificationPayload.from(notification));
+        } catch (RuntimeException e) {
+            log.warn("[noti] 발송 실패 notificationId={} receiverId={} — 행은 남아 REST 로 조회된다 cause={}",
+                    notification.getId(), notification.getReceiverId(), e.toString());
         }
     }
 
