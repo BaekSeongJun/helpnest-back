@@ -13,10 +13,10 @@ import org.springframework.stereotype.Repository;
 /**
  * 대시보드 집계 (docs/03 §4.4). docs/02 §5 읽기 전용 예외: 남의 테이블을 SQL 로 읽기만 하고 엔티티는 import 하지 않는다.
  * 참조 컬럼(PR 본문에도 기재): {@code ticket(ticket_id, status, agent_id, category, sla_breached, created_at,
- * first_responded_at, resolved_at)}, {@code member(member_id, name, role, status)}.
+ * first_responded_at, resolved_at)}, {@code member(member_id, name, role, status)}, {@code survey(ticket_id, rating)}.
  *
  * <p>기간은 [from, to) 로 받는다 — 시각 계산은 호출자(Asia/Seoul)가 하고 DB 세션 타임존·NOW() 에 의존하지 않는다.
- * ponytail: avg_rating 은 NULL 고정, 백성준 survey 테이블 머지 후 LEFT JOIN survey 로 교체
+ * 만족도는 survey 를 LEFT JOIN 해 응답된 설문(rating not null)만 평균 — survey.ticket_id 가 UNIQUE 라 행이 늘지 않는다.
  * ponytail: 매 요청 실시간 집계, 데이터가 커지면 캐시 또는 집계 테이블
  */
 @Repository
@@ -36,9 +36,10 @@ public class DashboardQueryRepository {
                    ROUND(AVG(EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 3600)::numeric, 2)         AS avg_resolve_hour,
                    ROUND(100.0 * COUNT(t.ticket_id) FILTER (WHERE t.sla_breached)
                          / NULLIF(COUNT(t.ticket_id), 0), 1)                                                  AS sla_breach_rate,
-                   NULL::numeric                                                                              AS avg_rating
+                   ROUND(AVG(s.rating)::numeric, 1)                                                           AS avg_rating
             FROM member m
             LEFT JOIN ticket t ON t.agent_id = m.member_id AND t.created_at >= :from AND t.created_at < :to
+            LEFT JOIN survey s ON s.ticket_id = t.ticket_id
             WHERE %s
             GROUP BY m.member_id, m.name
             ORDER BY m.name, m.member_id
@@ -46,7 +47,7 @@ public class DashboardQueryRepository {
 
     private final JdbcClient jdbc;
 
-    public record Kpi(long total, Double slaBreachRate, Double avgFirstResponseMin) {
+    public record Kpi(long total, Double slaBreachRate, Double avgFirstResponseMin, Double avgRating) {
     }
 
     public Kpi kpi(OffsetDateTime from, OffsetDateTime to) {
@@ -54,8 +55,10 @@ public class DashboardQueryRepository {
                         SELECT COUNT(*) AS total,
                                ROUND(100.0 * COUNT(*) FILTER (WHERE sla_breached) / NULLIF(COUNT(*), 0), 1) AS sla_breach_rate,
                                ROUND(AVG(EXTRACT(EPOCH FROM (first_responded_at - created_at)) / 60)::numeric, 1)
-                                   AS avg_first_response_min
-                        FROM ticket
+                                   AS avg_first_response_min,
+                               ROUND(AVG(s.rating)::numeric, 1) AS avg_rating
+                        FROM ticket t
+                        LEFT JOIN survey s ON s.ticket_id = t.ticket_id
                         WHERE\s""" + PERIOD)
                 .param("from", from).param("to", to)
                 .query(Kpi.class).single();

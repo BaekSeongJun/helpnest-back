@@ -60,7 +60,7 @@ public class ReportService {
 
         long prevTotal = previous.stream().mapToLong(CategoryStat::count).sum();
         return new MonthlyReport(ym.toString(), totals.total(), prevTotal, totals.avgFirstResponseMin(),
-                totals.avgResolveHour(), totals.slaBreachRate(), totals.negativeRate(), null, rows);
+                totals.avgResolveHour(), totals.slaBreachRate(), totals.negativeRate(), totals.avgRating(), rows);
     }
 
     YearMonth parse(String month) {
