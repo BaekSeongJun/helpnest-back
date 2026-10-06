@@ -3,7 +3,9 @@ package com.helpnest.domain.report.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -12,10 +14,12 @@ import com.helpnest.domain.report.dto.MonthlyReport.CategoryRow;
 import com.helpnest.domain.report.repository.ReportQueryRepository;
 import com.helpnest.global.error.BusinessException;
 import com.helpnest.global.security.JwtProvider;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -116,6 +120,32 @@ class ReportApiTest {
         assertThat(service.parse("2020-12")).isEqualTo(YearMonth.of(2020, 12));
         assertThatThrownBy(() -> service.parse("2020-13")).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> service.parse("202001")).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    @DisplayName("CSV: BOM·파일명·유형별 행(한글 라벨·증감률)·합계 행, AGENT 403")
+    void export() throws Exception {
+        String agent = "Bearer " + jwtProvider.createAccessToken(1L, "AGENT");
+        String lead = "Bearer " + jwtProvider.createAccessToken(1L, "LEAD");
+
+        byte[] body = mockMvc.perform(get("/api/reports/monthly/export?month=2020-01")
+                        .header(HttpHeaders.AUTHORIZATION, lead))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, "text/csv;charset=UTF-8"))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+                        containsString("filename=\"helpnest_report_2020-01.csv\"")))
+                .andReturn().getResponse().getContentAsByteArray();
+
+        assertThat(Arrays.copyOf(body, 3)).containsExactly(0xEF, 0xBB, 0xBF);
+        assertThat(new String(body, 3, body.length - 3, StandardCharsets.UTF_8)).isEqualTo("""
+                유형,건수,전월 건수,증감률(%),평균 처리시간(시간),불만 비율(%)\r
+                배송,2,0,,,0.0\r
+                환불,2,1,100.0,3.0,50.0\r
+                계정,0,2,-100.0,,\r
+                합계,4,3,33.3,3.0,25.0\r
+                """);
+        mockMvc.perform(get("/api/reports/monthly/export").header(HttpHeaders.AUTHORIZATION, agent))
+                .andExpect(status().isForbidden());
     }
 
     @Test
