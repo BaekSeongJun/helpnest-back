@@ -120,6 +120,7 @@ class SurveyResultApiTest {
 
         assertThat(num(page, "$.data.totalElements")).isGreaterThanOrEqualTo(3); // 미응답 C 는 제외
         assertThat(page.<String>read("$.data.content[0].ticketNo")).isEqualTo(ticketNoD); // 마지막 응답이 먼저
+        assertThat(num(page, "$.data.content[0].ticketId")).isPositive(); // 행 클릭 → 티켓 상세 이동용
         assertThat(page.<String>read("$.data.content[0].customerName")).isEqualTo("김비회원");
         assertThat(page.<String>read("$.data.content[0].agentName")).isNotBlank();
         assertThat(num(page, "$.data.content[0].rating")).isEqualTo(1);

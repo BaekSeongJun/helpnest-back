@@ -28,7 +28,8 @@ public interface SurveyResultRepository extends Repository<Survey, Long> {
 
     /** 제출된 응답만, 최근 제출 순. 별점 필터는 목록 전용 */
     @Query(value = """
-            select t.ticket_no as "ticketNo",
+            select t.ticket_id as "ticketId",
+                   t.ticket_no as "ticketNo",
                    coalesce(c.name, t.guest_name) as "customerName",
                    a.name as "agentName",
                    s.rating as "rating",
@@ -86,6 +87,8 @@ public interface SurveyResultRepository extends Repository<Survey, Long> {
             @Param("agentId") Long agentId, @Param("category") String category);
 
     interface ResultRow {
+        Long getTicketId();
+
         String getTicketNo();
 
         String getCustomerName();
