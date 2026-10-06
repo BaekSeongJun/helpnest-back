@@ -234,4 +234,32 @@ public class Ticket extends BaseTimeEntity {
     public void markSlaBreached() {
         this.slaBreached = true;
     }
+
+    /**
+     * 비회원 조회 비밀번호 해시를 교체한다({@code TicketGuestPort.updateGuestPassword},
+     * PRD FR-AUTH-09).
+     *
+     * <h2>여기서 검증하는 이유</h2>
+     * {@link #changeStatusTo} 처럼 검증을 호출자에게 맡기지 않고 <b>엔티티가 직접 막는다.</b>
+     * 조회 비밀번호는 비회원 티켓만의 자격증명이고, 회원 티켓의 이 컬럼에 해시가 들어가면
+     * 아무도 쓰지 않는 자격증명이 조용히 생긴다 — 되돌릴 계기도 없어 그대로 남는다. 상태 전이와
+     * 달리 "호출 전에 확인했겠지"에 맡길 값이 아니다.
+     *
+     * <p>예외를 던지지 않고 {@code false} 를 돌려주는 것은 포트 계약 때문이다. 호출자(백성준)는
+     * 티켓의 존재·종류가 응답에 드러나지 않게 결과와 무관하게 같은 응답을 주어야 한다
+     * ({@code TicketGuestPort.verifyGuest} 주석의 계정 열거 방지와 같은 이유). 반환값은
+     * 호출자의 분기용이 아니라 어댑터가 로그에 남길 "반영됐는지"를 위한 것이다.
+     *
+     * @param passwordHash BCrypt 해시. 원문 비밀번호는 여기까지 오지 않는다 — 해싱은 인증 정책을
+     *                     가진 호출자 책임이다(docs/02 §5.2)
+     * @return 실제로 교체했으면 {@code true}. 회원 티켓이거나 해시가 {@code null} 이면
+     *         {@code false} 이고 아무것도 바꾸지 않는다
+     */
+    public boolean changeGuestPasswordHash(String passwordHash) {
+        if (this.customerId != null || passwordHash == null) {
+            return false;
+        }
+        this.guestPasswordHash = passwordHash;
+        return true;
+    }
 }
