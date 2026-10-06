@@ -46,6 +46,23 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     long countUnread(@Param("receiverId") Long receiverId);
 
     /**
+     * 알림 한 건을 읽음으로 바꾼다 (PATCH /api/notifications/{id}/read).
+     *
+     * <p>조건에 {@code receiverId} 가 들어가는 것이 이 쿼리의 요점이다 — 소유 검증을 UPDATE
+     * 조건으로 하면 "조회해서 주인을 확인한 뒤 수정"의 두 단계가 한 번으로 줄고, 그 사이에
+     * 끼어들 여지도 없어진다. 남의 알림이면 영향 행이 0이고 호출자는 그것을 404 로 바꾼다
+     * ({@code NotificationService} 주석).
+     *
+     * <p>{@code isRead = false} 를 조건에 넣지 않아 이미 읽은 알림에도 영향 행 1을 돌려준다 —
+     * 멱등이어야 하는 이유는 서비스 쪽에 적어 두었다.
+     *
+     * @return 영향 행 수 (0 = 없거나 남의 알림, 1 = 처리됨)
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("update Notification n set n.isRead = true where n.id = :id and n.receiverId = :receiverId")
+    int markRead(@Param("receiverId") Long receiverId, @Param("id") Long id);
+
+    /**
      * 수신자의 미읽음 알림을 모두 읽음으로 바꾼다 (PATCH /api/notifications/read-all).
      *
      * <p>엔티티를 하나씩 불러 {@link Notification#markRead()} 를 호출하지 않고 벌크 UPDATE 를
