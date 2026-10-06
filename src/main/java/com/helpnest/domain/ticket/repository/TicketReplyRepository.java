@@ -2,6 +2,7 @@
 package com.helpnest.domain.ticket.repository;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 import com.helpnest.domain.ticket.entity.TicketCategory;
 import com.helpnest.domain.ticket.entity.TicketReply;
+import com.helpnest.domain.ticket.entity.WriterType;
 import com.helpnest.domain.ticket.port.ResolvedReply;
 
 /**
@@ -61,4 +63,18 @@ public interface TicketReplyRepository extends JpaRepository<TicketReply, Long> 
             order by r.createdAt desc
             """)
     List<ResolvedReply> findResolvedReplies(@Param("category") TicketCategory category, Pageable pageable);
+
+    /**
+     * 해결 결과 메일에 넣을 <b>가장 최근 상담원 공개 답변</b>
+     * ({@code TicketQueryPort.getResolvedMailInfo}, CR #48).
+     *
+     * <p>조건을 이름에 다 박아 둔 것은 위 고객용 목록과 같은 이유다 — {@code isInternal=false} 가
+     * 빠지면 상담원끼리 주고받은 내부 메모가 그대로 고객 메일로 나간다. {@code writerType} 만
+     * 인자로 받는 것은 파생 쿼리가 enum 상수를 이름에 담을 수 없어서이며, 호출부는
+     * {@code WriterType.AGENT} 한 곳뿐이다.
+     *
+     * @return 공개 답변 없이 해결된 티켓이면 {@code Optional.empty()}
+     */
+    Optional<TicketReply> findFirstByTicketIdAndWriterTypeAndIsInternalFalseOrderByCreatedAtDesc(
+            Long ticketId, WriterType writerType);
 }
