@@ -148,4 +148,23 @@ public interface TicketRepository extends JpaRepository<Ticket, Long>, JpaSpecif
             @Param("warningCutoff") OffsetDateTime warningCutoff,
             @Param("now") OffsetDateTime now,
             @Param("doneStatuses") Collection<TicketStatus> doneStatuses);
+
+    /**
+     * 해결된 뒤 응답 없이 방치된 자동 종료 대상의 ticket_id
+     * (docs/03 §4.9, {@code AutoCloseScheduler}).
+     *
+     * <p><b>엔티티가 아니라 id 만 반환한다.</b> 전이는 {@code TicketService.changeStatus} 가
+     * {@code findByIdForUpdate} 로 다시 읽어 수행하므로(비관적 락으로 동시 전이를 막는다)
+     * 여기서 엔티티까지 끌고 오면 그대로 버려진다.
+     *
+     * <p>설문 제출로 이미 종료된 티켓은 상태 조건에서 빠지고, 재문의로 IN_PROGRESS 가 된
+     * 티켓도 같다 — {@code resolved_at} 은 남아 있지만 상태가 RESOLVED 가 아니다. 즉
+     * "72시간 안에 아무 일도 일어나지 않은 티켓"만 남는다.
+     */
+    @Query("""
+            select t.id from Ticket t
+            where t.status = com.helpnest.domain.ticket.entity.TicketStatus.RESOLVED
+              and t.resolvedAt < :cutoff
+            """)
+    List<Long> findAutoCloseTargets(@Param("cutoff") OffsetDateTime cutoff);
 }
