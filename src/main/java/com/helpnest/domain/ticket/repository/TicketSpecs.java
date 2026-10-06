@@ -1,7 +1,6 @@
 // @owner PMJ
 package com.helpnest.domain.ticket.repository;
 
-import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -130,12 +129,14 @@ public final class TicketSpecs {
     /**
      * 이 우선순위에서 "지금 임박"이 되는 접수 시각의 상한.
      *
-     * <p>임박까지의 분을 {@link SlaPolicy#calculateWarningAt} 로부터 되뽑는다 — 비율 곱셈과
+     * <p>임박까지의 분은 {@link SlaPolicy#warningMinutes()} 에게 묻는다 — 비율 곱셈과
      * 반올림을 여기서 다시 쓰면 스케줄러(S2)의 판정과 어긋날 수 있고, 그러면 목록에 임박으로
      * 보이는데 알림은 오지 않는(또는 반대) 상태가 생긴다.
+     *
+     * <p>그래서 {@code SlaScheduler} 가 이 메서드를 그대로 호출한다 — 목록 배지와 임박 알림은
+     * <b>같은 식 한 군데</b>에서 나와야 하며, public 인 이유가 이것뿐이다.
      */
-    private static OffsetDateTime warningCutoff(SlaPolicy policy, OffsetDateTime now) {
-        long warningMinutes = Duration.between(now, policy.calculateWarningAt(now)).toMinutes();
-        return now.minusMinutes(warningMinutes);
+    public static OffsetDateTime warningCutoff(SlaPolicy policy, OffsetDateTime now) {
+        return now.minusMinutes(policy.warningMinutes());
     }
 }

@@ -26,7 +26,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  *
  * <p>허용 역할은 401·403 이 아니면 통과(없는 id·빈 본문이라 404·400 이 나와도 권한은 통과한 것),
  * 금지 역할은 비로그인 401 · 로그인했으나 역할 부족 403 이어야 한다. 존재하지 않는 id 로만 쳐서
- * 데이터가 바뀌지 않는다. 채팅·SLA 관리·고객 이력은 아직 dev 에 없어 구현되면 행을 추가한다.
+ * 데이터가 바뀌지 않는다. 채팅·고객 이력은 아직 dev 에 없어 구현되면 행을 추가한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -87,8 +87,13 @@ class RoleAccessMatrixTest {
                 row("GET", "/api/reports/monthly/export", LEAD_UP),
                 row("GET", "/api/admin/faqs", LEAD_UP),
                 row("GET", "/api/admin/templates", LEAD_UP),
+                row("GET", "/api/admin/sla-policies", LEAD_UP),
                 // 관리자 전용
-                row("GET", "/api/admin/members", ADMIN_ONLY))
+                row("GET", "/api/admin/members", ADMIN_ONLY),
+                // 이 행만 실제로 쓰기가 된다(없는 id 를 쓸 수 없는 고정 4행 테이블). 본문을
+                // 마이그레이션 기본값(60분·0.80)으로 두어 ADMIN 행이 통과해도 값은 그대로다
+                row("PUT", "/api/admin/sla-policies/URGENT", "{\"responseMinutes\":60,\"warningRatio\":0.80}",
+                        ADMIN_ONLY))
                 .flatMap(Function.identity());
     }
 
