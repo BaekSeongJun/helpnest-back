@@ -23,4 +23,18 @@ public interface TicketQueryPort {
      * @return 참고할 답변. 없으면 빈 List
      */
     List<ResolvedReply> findResolvedReplies(String category, int limit);
+
+    /**
+     * 해결 결과 메일에 필요한 티켓 정보를 반환한다(CR #48, PRD FR-SRV-01·02).
+     *
+     * <p>호출자는 백성준의 {@code SurveyListener} 이며, 받은 값을 신수진의
+     * {@code MailSender.sendResolvedMail} 에 넘긴다. 수신자 이름·이메일을 내가 완성해 주지 않는
+     * 이유와 답변을 요약하지 않는 이유는 {@link ResolvedMailInfo} 주석에 있다.
+     *
+     * @param ticketId 대상 티켓
+     * @return 메일 발송에 필요한 값. 티켓이 없으면 {@code TICKET_NOT_FOUND} 를 던진다
+     *         ({@link #getTicketSummary} 와 같은 방침 — 메일이 조용히 누락되면
+     *         고객은 해결 통보를 영구히 받지 못한다)
+     */
+    ResolvedMailInfo getResolvedMailInfo(Long ticketId);
 }
