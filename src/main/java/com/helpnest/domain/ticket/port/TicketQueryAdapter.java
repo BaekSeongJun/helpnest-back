@@ -9,6 +9,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.helpnest.domain.ticket.entity.Ticket;
 import com.helpnest.domain.ticket.entity.TicketCategory;
+import com.helpnest.domain.ticket.entity.TicketReply;
+import com.helpnest.domain.ticket.entity.WriterType;
 import com.helpnest.domain.ticket.error.TicketErrorCode;
 import com.helpnest.domain.ticket.repository.TicketReplyRepository;
 import com.helpnest.domain.ticket.repository.TicketRepository;
@@ -76,5 +78,32 @@ public class TicketQueryAdapter implements TicketQueryPort {
                 PageRequest.of(0, limit));
         log.debug("[query] 과거 답변 category={} limit={} found={}", parsed, limit, replies.size());
         return replies;
+    }
+
+    /**
+     * 해결 결과 메일 입력 (CR #48).
+     *
+     * <p>두 번 조회한다. 티켓과 답변을 한 쿼리로 조인하면 공개 답변이 없는 티켓이 결과에서
+     * 사라져 "티켓이 없다"와 "답변이 없다"를 구분할 수 없게 된다. 전자는 예외, 후자는
+     * {@code lastPublicReply == null} 로 구분되어야 한다 — 답변 없이 해결된 티켓도 결과 메일은
+     * 가야 한다.
+     */
+    @Override
+    public ResolvedMailInfo getResolvedMailInfo(Long ticketId) {
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new BusinessException(TicketErrorCode.NOT_FOUND));
+
+        String lastPublicReply = ticketReplyRepository
+                .findFirstByTicketIdAndWriterTypeAndIsInternalFalseOrderByCreatedAtDescIdDesc(
+                        ticketId, WriterType.AGENT)
+                .map(TicketReply::getContent)
+                .orElse(null);
+
+        // 티켓번호와 답변 유무만 남긴다 — 제목·본문·비회원 이메일은 로그 금지 (docs/10 §3.3)
+        log.debug("[query] 해결 메일 정보 ticketNo={} member={} hasPublicReply={}",
+                ticket.getTicketNo(), ticket.getCustomerId() != null, lastPublicReply != null);
+
+        return new ResolvedMailInfo(ticket.getTicketNo(), ticket.getTitle(), ticket.getCustomerId(),
+                ticket.getGuestName(), ticket.getGuestEmail(), lastPublicReply);
     }
 }
