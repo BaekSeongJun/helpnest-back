@@ -1,0 +1,11 @@
+# @owner SSJ — AWS 설정 (application.yml 에서 import, docs/02 §7·§8)
+# prod 프로필에서만 쓰인다(AwsConfig·S3FileStorage·SesMailTransport). 비어 있으면 prod 기동 시 실패.
+# 자격 증명 키는 두지 않는다 — EC2 IAM Role(SDK 기본 체인)
+aws:
+  region: ${AWS_REGION:ap-northeast-2}
+storage:
+  s3:
+    bucket: ${S3_BUCKET:}
+mail:
+  ses:
+    from: ${SES_FROM_EMAIL:}
