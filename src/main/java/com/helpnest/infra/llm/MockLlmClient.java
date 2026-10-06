@@ -5,6 +5,7 @@ import com.helpnest.domain.ai.dto.ClassificationResult;
 import com.helpnest.domain.ai.dto.ClassificationResult.Category;
 import com.helpnest.domain.ai.dto.ClassificationResult.Sentiment;
 import com.helpnest.domain.ai.dto.ClassificationResult.Urgency;
+import com.helpnest.domain.ai.dto.DraftResult;
 import java.util.List;
 import java.util.Map;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -32,8 +33,18 @@ public class MockLlmClient implements LlmClient {
     private static final List<String> NEGATIVE_WORDS = List.of("불만", "화가", "짜증", "재문의", "다시 문의");
     private static final List<String> POSITIVE_WORDS = List.of("감사", "고맙");
 
+    // AI-2 초안 로컬 데모용 고정 문장 (docs/05 §4.2 형식: 공감 → 안내 → [확인 필요] → 추가 문의)
+    private static final String DRAFT = """
+            문의 주셔서 감사합니다. 불편을 드려 죄송합니다.
+            말씀하신 내용을 확인한 뒤 처리 절차를 안내해 드리겠습니다.
+            [확인 필요: 주문번호·처리 예정일]
+            추가로 궁금하신 점이 있으시면 언제든 문의해 주세요.""";
+
     @Override
     public <T> T structured(String system, String user, Class<T> type) {
+        if (type == DraftResult.class) {
+            return type.cast(new DraftResult(DRAFT));
+        }
         if (type != ClassificationResult.class) {
             throw new UnsupportedOperationException("MockLlmClient 미지원 타입: " + type.getSimpleName());
         }

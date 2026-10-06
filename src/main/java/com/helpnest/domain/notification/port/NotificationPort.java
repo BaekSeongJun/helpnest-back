@@ -6,7 +6,8 @@ package com.helpnest.domain.notification.port;
  *
  * <p>웹 알림의 유일한 입구다. 저장(NOTIFICATION 테이블)과 WebSocket 발송
  * ({@code /user/queue/notifications}, docs/02 §6)을 구현이 함께 처리하므로 호출자는 둘을
- * 구분할 필요가 없다.
+ * 구분할 필요가 없다. 현재 저장까지 구현됐고 발송은 WebSocket 설정 이후에 붙는다 —
+ * 저장이 먼저 되므로 발송이 없는 동안에도 알림은 유실되지 않는다.
  */
 public interface NotificationPort {
 
@@ -17,7 +18,8 @@ public interface NotificationPort {
      * @param type       docs/03 §2.1 notification.type 값 — ASSIGNED, SLA_WARNING, SLA_BREACHED,
      *                   CUSTOMER_REPLY, AGENT_REPLY, STATUS_CHANGED, UNASSIGNED, CHAT_REQUEST.
      *                   enum 이 아니라 String 인 이유는 호출자가 내 도메인 타입을 import 하지 않게
-     *                   하려는 것이며, NOTIFICATION 테이블과 타입 enum 은 로드맵상 S2 다
+     *                   하려는 것이다. 구현 쪽 enum 으로의 변환·검증은 어댑터가 하며, 8종에 없는
+     *                   값은 저장되지 않고 경고 로그만 남는다(예외는 올라오지 않는다)
      * @param ticketId   관련 티켓. 티켓과 무관한 알림이면 {@code null} 을 넘긴다(DDL 도 nullable)
      * @param message    알림 문구. NOTIFICATION.message 가 VARCHAR(300) 이므로 300자를 넘기면 안 된다
      */

@@ -132,6 +132,29 @@ class FaqFlowTest {
         assertThat(faqQueryPort.findPublishedByCategory("REFUND", null, 0)).isEmpty();
     }
 
+    @Test
+    @DisplayName("추천: 단어별 일치 수 → 조회수 순 최대 3건, 공개 글만, 2자 미만 단어뿐이면 빈 배열")
+    void suggest() throws Exception {
+        Faq popular = faqRepository.save(faq(TicketCategory.ETC, KW + " 인기", true));
+        faqRepository.save(faq(TicketCategory.ETC, KW + " 넷째", true));
+        faqRepository.incrementViewCount(popular.getId());
+        faqRepository.incrementViewCount(hidden.getId());   // 비공개는 +1 되지 않지만 조회수와 무관하게 제외돼야 함
+
+        // 문장으로 입력해도 단어 단위로 찾는다 (나머지 단어는 어느 글에도 없음)
+        mockMvc.perform(get("/api/faqs/suggest").param("q", KW + " 없는말zz 되나욬"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(3))
+                .andExpect(jsonPath("$.data[0].faqId").value(popular.getId()))
+                .andExpect(jsonPath("$.data[?(@.faqId == " + hidden.getId() + ")]").isEmpty());
+        // 더 많은 단어가 일치하는 글이 조회수보다 먼저
+        mockMvc.perform(get("/api/faqs/suggest").param("q", KW + " 배송"))
+                .andExpect(jsonPath("$.data[0].question").value(KW + " 배송 공개"));
+        mockMvc.perform(get("/api/faqs/suggest").param("q", " 환 "))
+                .andExpect(jsonPath("$.data.length()").value(0));
+        mockMvc.perform(get("/api/faqs/suggest"))
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
     private Faq faq(TicketCategory category, String question, boolean isPublished) {
         return Faq.builder().category(category).question(question).answer("답변 " + question)
                 .published(isPublished).createdBy(lead.getId()).build();
