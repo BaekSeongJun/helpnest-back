@@ -66,9 +66,7 @@ class RoleAccessMatrixTest {
                 row("GET", "/api/notifications/unread-count", MEMBERS),
                 row("PATCH", "/api/notifications/" + NO_SUCH_ID + "/read", MEMBERS),
                 row("PATCH", "/api/notifications/read-all", MEMBERS),
-                // 04 는 CUSTOMER 전용인데 현재는 로그인 회원 누구나 200 이다(직원은 본인 소유가 없어 빈 목록 —
-                // 남의 데이터는 나오지 않는다). 박민재가 CUSTOMER 로 좁히면 이 행이 실패하니 CUSTOMER 만으로 바꾼다
-                row("GET", "/api/tickets/my", MEMBERS),
+                row("GET", "/api/tickets/my", EnumSet.of(Who.CUSTOMER)),   // 04 §7 고객 전용 (CR #75)
                 // 상담원 이상
                 row("GET", "/api/console/agents", AGENT_UP),
                 row("GET", "/api/templates", AGENT_UP),
