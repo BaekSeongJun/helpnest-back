@@ -34,7 +34,7 @@ public class DashboardService {
         OffsetDateTime from = period.start(now);
         Kpi kpi = repository.kpi(from, now);
         return new DashboardSummary(kpi.total(), repository.unassigned(), kpi.slaBreachRate(),
-                kpi.avgFirstResponseMin(), null, repository.countByStatus(from, now),
+                kpi.avgFirstResponseMin(), kpi.avgRating(), repository.countByStatus(from, now),
                 repository.countByCategory(from, now));
     }
 

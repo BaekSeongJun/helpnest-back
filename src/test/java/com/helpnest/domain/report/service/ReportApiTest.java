@@ -76,6 +76,21 @@ class ReportApiTest {
         ticket("HN-RPT-6", "REFUND", null, false, "2019-12-10T00:00:00+09:00", null, null);
         ticket("HN-RPT-7", "ACCOUNT", null, false, "2019-12-11T00:00:00+09:00", null, null);
         ticket("HN-RPT-8", "ACCOUNT", null, false, "2019-12-12T00:00:00+09:00", null, null);
+        // 설문: 1월 응답 5·2 + 미응답 1 → 3.5, 2월 티켓 응답 1 은 1월 평균에서 제외
+        survey("HN-RPT-1", 5);
+        survey("HN-RPT-2", 2);
+        survey("HN-RPT-3", null);
+        survey("HN-RPT-5", 1);
+    }
+
+    // survey(백성준 소유) 는 SQL 로 시드. 미응답은 rating·submitted_at 이 NULL
+    private void survey(String ticketNo, Integer rating) {
+        jdbc.update("""
+                insert into survey(ticket_id, token, rating, sent_at, expires_at, submitted_at)
+                select ticket_id, 'rpt-' || ticket_no, ?, now(), now() + interval '72 hours',
+                       case when ?::smallint is null then null else now() end
+                from ticket where ticket_no = ?
+                """, rating, rating, ticketNo);
     }
 
     @Test
@@ -90,7 +105,7 @@ class ReportApiTest {
         assertThat(r.avgResolveHour()).isEqualTo(3.0);
         assertThat(r.slaBreachRate()).isEqualTo(25.0);
         assertThat(r.negativeRate()).isEqualTo(25.0);
-        assertThat(r.avgRating()).isNull();
+        assertThat(r.avgRating()).isEqualTo(3.5);
         assertThat(r.byCategory()).containsExactly(
                 new CategoryRow("DELIVERY", 2, 0, null, 0.0),
                 new CategoryRow("REFUND", 2, 1, 3.0, 50.0),
@@ -106,6 +121,7 @@ class ReportApiTest {
         assertThat(r.slaBreachRate()).isNull();
         assertThat(r.negativeRate()).isNull();
         assertThat(r.avgResolveHour()).isNull();
+        assertThat(r.avgRating()).isNull();
         assertThat(r.byCategory()).isEmpty();
     }
 

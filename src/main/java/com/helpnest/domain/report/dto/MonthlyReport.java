@@ -5,7 +5,7 @@ import java.util.List;
 
 /**
  * 월간 리포트 (docs/04 §13, FR-RPT-01). 대상은 그 달(Asia/Seoul)에 접수된 티켓.
- * 비율은 0~100, 대상이 없으면 비율·평균 null. avgRating 은 survey 테이블 전까지 항상 null.
+ * 비율은 0~100, 대상이 없으면 비율·평균 null. avgRating 은 응답된 설문 평균(소수 1자리, 응답 없으면 null).
  */
 public record MonthlyReport(
         String month,
