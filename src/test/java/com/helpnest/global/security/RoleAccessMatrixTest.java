@@ -26,7 +26,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  *
  * <p>허용 역할은 401·403 이 아니면 통과(없는 id·빈 본문이라 404·400 이 나와도 권한은 통과한 것),
  * 금지 역할은 비로그인 401 · 로그인했으나 역할 부족 403 이어야 한다. 존재하지 않는 id 로만 쳐서
- * 데이터가 바뀌지 않는다. 채팅·고객 이력은 아직 dev 에 없어 구현되면 행을 추가한다.
+ * 데이터가 바뀌지 않는다. 채팅은 아직 dev 에 없어 구현되면 행을 추가한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -76,6 +76,8 @@ class RoleAccessMatrixTest {
                 row("GET", t + "/ai/drafts", AGENT_UP),
                 row("GET", "/api/console/surveys", AGENT_UP),
                 row("GET", "/api/console/surveys/summary", AGENT_UP),
+                row("GET", "/api/console/customers/by-ticket/" + NO_SUCH_ID, AGENT_UP),
+                row("GET", "/api/console/customers/M-" + NO_SUCH_ID + "/tickets", AGENT_UP),
                 row("GET", "/api/dashboard/agents/me", AGENT_UP),
                 // 팀장 이상
                 row("PATCH", t + "/assign", "{\"agentId\":1}", LEAD_UP),
