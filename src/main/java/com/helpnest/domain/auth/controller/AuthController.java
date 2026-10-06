@@ -3,10 +3,15 @@ package com.helpnest.domain.auth.controller;
 
 import com.helpnest.domain.auth.dto.AuthResponse;
 import com.helpnest.domain.auth.dto.GuestLoginRequest;
+import com.helpnest.domain.auth.dto.GuestPasswordResetMailRequest;
+import com.helpnest.domain.auth.dto.GuestPasswordResetRequest;
 import com.helpnest.domain.auth.dto.GuestTokenResponse;
 import com.helpnest.domain.auth.dto.LoginRequest;
+import com.helpnest.domain.auth.dto.PasswordResetMailRequest;
+import com.helpnest.domain.auth.dto.PasswordResetRequest;
 import com.helpnest.domain.auth.dto.SignupRequest;
 import com.helpnest.domain.auth.service.AuthService;
+import com.helpnest.domain.auth.service.PasswordResetService;
 import com.helpnest.domain.member.dto.MemberResponse;
 import com.helpnest.global.common.ApiResponse;
 import com.helpnest.global.security.JwtProperties;
@@ -31,6 +36,7 @@ public class AuthController {
     static final String REFRESH_COOKIE = "refreshToken";
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
     private final JwtProperties jwtProperties;
 
     @PostMapping("/signup")
@@ -47,6 +53,34 @@ public class AuthController {
     @PostMapping("/guest")
     public ApiResponse<GuestTokenResponse> guest(@Valid @RequestBody GuestLoginRequest req) {
         return ApiResponse.ok(authService.guestLogin(req));
+    }
+
+    /** 비밀번호 찾기 (CM-03). 가입 여부와 무관하게 항상 200 — 계정 존재 비노출 (FR-AUTH-07) */
+    @PostMapping("/password/reset-request")
+    public ApiResponse<Void> requestPasswordReset(@Valid @RequestBody PasswordResetMailRequest req) {
+        passwordResetService.requestMemberReset(req.email());
+        return ApiResponse.ok();
+    }
+
+    /** 재설정 (CM-04). 성공 시 모든 Refresh 폐기 → 새 비밀번호로 다시 로그인 */
+    @PostMapping("/password/reset")
+    public ApiResponse<Void> resetPassword(@Valid @RequestBody PasswordResetRequest req) {
+        passwordResetService.resetMemberPassword(req.token(), req.newPassword());
+        return ApiResponse.ok();
+    }
+
+    /** 비회원 조회 비밀번호 재설정 메일 (CU-06 ①). 티켓번호·이메일이 맞든 아니든 항상 200 (FR-AUTH-09) */
+    @PostMapping("/guest/reset-request")
+    public ApiResponse<Void> requestGuestReset(@Valid @RequestBody GuestPasswordResetMailRequest req) {
+        passwordResetService.requestGuestReset(req.ticketNo(), req.email());
+        return ApiResponse.ok();
+    }
+
+    /** 새 조회 비밀번호 (CU-06 ②) */
+    @PostMapping("/guest/reset")
+    public ApiResponse<Void> resetGuestPassword(@Valid @RequestBody GuestPasswordResetRequest req) {
+        passwordResetService.resetGuestPassword(req.token(), req.newPassword());
+        return ApiResponse.ok();
     }
 
     @PostMapping("/refresh")
