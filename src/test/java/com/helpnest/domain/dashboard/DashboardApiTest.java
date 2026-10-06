@@ -2,7 +2,9 @@
 package com.helpnest.domain.dashboard;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -11,7 +13,9 @@ import com.helpnest.domain.dashboard.dto.Period;
 import com.helpnest.domain.dashboard.repository.DashboardQueryRepository;
 import com.helpnest.domain.dashboard.repository.DashboardQueryRepository.Kpi;
 import com.helpnest.global.security.JwtProvider;
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -125,6 +129,28 @@ class DashboardApiTest {
         OffsetDateTime now = OffsetDateTime.parse("2020-01-31T16:00:00Z"); // 서울 2020-02-01 01:00
         assertThat(Period.TODAY.start(now)).isEqualTo(OffsetDateTime.parse("2020-02-01T00:00:00+09:00"));
         assertThat(Period.parse("7D").start(now)).isEqualTo(now.minusDays(7));
+    }
+
+    @Test
+    @DisplayName("상담원 CSV: BOM·헤더·쉼표/따옴표 이름 이스케이프·파일명, AGENT 403")
+    void exportAgents() throws Exception {
+        member("dash-c@test.local", "김,\"팀\"장");
+        String agent = "Bearer " + jwtProvider.createAccessToken(agentA, "AGENT");
+        String lead = "Bearer " + jwtProvider.createAccessToken(agentB, "LEAD");
+
+        byte[] body = mockMvc.perform(get("/api/dashboard/agents/export?period=30D")
+                        .header(HttpHeaders.AUTHORIZATION, lead))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+                        matchesPattern(".*filename=\"helpnest_agents_30D_\\d{8}\\.csv\".*")))
+                .andReturn().getResponse().getContentAsByteArray();
+
+        assertThat(Arrays.copyOf(body, 3)).containsExactly(0xEF, 0xBB, 0xBF);
+        String text = new String(body, 3, body.length - 3, StandardCharsets.UTF_8);
+        assertThat(text).startsWith("상담원,배정,처리중,오늘 해결,평균 첫 응답(분),평균 해결(시간),SLA 위반율(%),평균 만족도\r\n")
+                .contains("\r\n\"김,\"\"팀\"\"장\",0,0,0,,,,\r\n");
+        mockMvc.perform(get("/api/dashboard/agents/export").header(HttpHeaders.AUTHORIZATION, agent))
+                .andExpect(status().isForbidden());
     }
 
     @Test

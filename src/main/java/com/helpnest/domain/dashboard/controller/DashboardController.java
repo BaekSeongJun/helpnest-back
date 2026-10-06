@@ -5,10 +5,15 @@ import com.helpnest.domain.dashboard.dto.AgentStat;
 import com.helpnest.domain.dashboard.dto.DashboardSummary;
 import com.helpnest.domain.dashboard.dto.Period;
 import com.helpnest.domain.dashboard.service.DashboardService;
+import com.helpnest.domain.report.csv.Csv;
 import com.helpnest.global.common.ApiResponse;
 import com.helpnest.global.security.JwtProvider;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -26,6 +31,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class DashboardController {
 
+    static final List<String> AGENT_HEADER = List.of("상담원", "배정", "처리중", "오늘 해결", "평균 첫 응답(분)",
+            "평균 해결(시간)", "SLA 위반율(%)", "평균 만족도");
+
     private final DashboardService dashboardService;
 
     @GetMapping("/summary")
@@ -40,6 +48,20 @@ public class DashboardController {
             @AuthenticationPrincipal Jwt jwt) {
         requireLead(jwt);
         return ApiResponse.ok(dashboardService.agents(Period.parse(period)));
+    }
+
+    /** 상담원별 처리현황 CSV (FR-RPT-02). 파일명 helpnest_agents_{period}_{서울 yyyyMMdd}.csv */
+    @GetMapping("/agents/export")
+    public ResponseEntity<byte[]> exportAgents(@RequestParam(required = false) String period,
+            @AuthenticationPrincipal Jwt jwt) {
+        requireLead(jwt);
+        List<List<?>> rows = dashboardService.agents(Period.parse(period)).stream()
+                .<List<?>>map(a -> Arrays.asList(a.name(), a.assignedCount(), a.inProgressCount(), a.resolvedToday(),
+                        a.avgFirstResponseMin(), a.avgResolveHour(), a.slaBreachRate(), a.avgRating()))
+                .toList();
+        String filename = "helpnest_agents_%s_%s.csv".formatted(period == null ? "TODAY" : period,
+                LocalDate.now(Period.SEOUL).format(DateTimeFormatter.BASIC_ISO_DATE));
+        return Csv.download(filename, Csv.write(AGENT_HEADER, rows));
     }
 
     @GetMapping("/agents/me")
