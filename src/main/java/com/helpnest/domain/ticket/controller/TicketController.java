@@ -6,6 +6,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -56,11 +57,15 @@ public class TicketController {
     }
 
     /**
-     * 내 문의 목록 (CU-08). 회원 전용이다 — Guest 토큰은
-     * {@code JwtProvider.memberId} 가 403 으로 막는다. 비회원은 티켓 1건에만 유효한 토큰을
+     * 내 문의 목록 (CU-08). 고객 전용이다 (04 §7) — 비회원은 티켓 1건에만 유효한 토큰을
      * 받으므로 "목록"이 성립하지 않고, 상세 조회로 그 1건을 본다.
+     *
+     * <p>CUSTOMER 는 역할 계층 밖이라 {@code hasRole('CUSTOMER')} 하나로 직원(AGENT+)과
+     * Guest 토큰이 함께 403 이 된다. 직원이 호출하면 본인 memberId 로 조회해 빈 목록이
+     * 나올 뿐이었지만, 04 §7 과 어긋나 막는다 (CR #75).
      */
     @GetMapping("/my")
+    @PreAuthorize("hasRole('CUSTOMER')")
     public ResponseEntity<ApiResponse<PageResponse<TicketListItemResponse>>> myTickets(
             @AuthenticationPrincipal Jwt jwt,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
