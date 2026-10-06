@@ -110,4 +110,29 @@ class SurveyServiceTest {
 
         assertThat(surveyRepository.count()).isZero();
     }
+
+    @Test
+    @DisplayName("조건부 UPDATE — 같은 설문을 두 번 확정하면 두 번째는 0건 (동시 제출 방지의 근거)")
+    void markSubmittedOnlyOnce() {
+        Survey survey = surveyService.issueOrReissue(givenTicketId());
+        OffsetDateTime now = OffsetDateTime.now();
+
+        int first = surveyRepository.markSubmitted(survey.getId(), (short) 5, "첫 응답", now);
+        int second = surveyRepository.markSubmitted(survey.getId(), (short) 1, "두 번째", now);
+
+        assertThat(first).isEqualTo(1);
+        assertThat(second).isZero();
+        assertThat(surveyRepository.findById(survey.getId()).orElseThrow().getRating()).isEqualTo((short) 5);
+    }
+
+    @Test
+    @DisplayName("조건부 UPDATE — 만료 시각이 지난 설문은 확정하지 않는다")
+    void markSubmittedRejectsExpired() {
+        Survey survey = surveyService.issueOrReissue(givenTicketId());
+
+        int updated = surveyRepository.markSubmitted(survey.getId(), (short) 5, null,
+                survey.getExpiresAt().plusSeconds(1));
+
+        assertThat(updated).isZero();
+    }
 }
