@@ -4,6 +4,7 @@ package com.helpnest.domain.ticket.port;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.helpnest.domain.ticket.entity.Ticket;
 import com.helpnest.domain.ticket.repository.TicketRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -12,8 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * 비회원 인증에 필요한 티켓 조회 (CR #34, PRD FR-AUTH-09).
  *
- * <p>비회원은 member 행이 없어 티켓 자체가 인증 대상이 된다. 조회 두 건은 S1 에서 실구현했고
- * {@link #updateGuestPassword} 만 스텁으로 남아 있다.
+ * <p>비회원은 member 행이 없어 티켓 자체가 인증 대상이 된다. 세 메서드 모두 실구현됐다 —
+ * 조회 두 건은 S1, {@link #updateGuestPassword} 는 S2.
  *
  * <h2>로그에 무엇을 남기지 않는가</h2>
  * 이메일·비밀번호 해시·티켓 본문은 로그에 남기지 않는다(docs/10 §3.3). 시그니처에 두 값이
@@ -26,8 +27,6 @@ import lombok.extern.slf4j.Slf4j;
  * 호출자는 결과와 무관하게 같은 응답을 주고, 해시가 없을 때도 더미 해시와 한 번 비교해
  * 응답 시간까지 같게 맞춘다.
  *
- * <p>TODO(PMJ) S2 updateGuestPassword 구현 — Ticket 에 guest_password_hash 를 바꾸는 변경
- * 메서드를 추가해야 한다(현재 엔티티에는 없다). 비회원 티켓이 아니면 거부한다.
  */
 @Slf4j
 @Component
@@ -62,8 +61,27 @@ public class TicketGuestAdapter implements TicketGuestPort {
         return hash;
     }
 
+    /**
+     * 조회 비밀번호 해시를 교체한다. 회원 티켓이면 바꾸지 않는다 —
+     * 판정은 {@link Ticket#changeGuestPasswordHash} 가 하고 그 주석에 이유가 있다.
+     *
+     * <p>클래스에 {@code @Transactional(readOnly = true)} 가 걸려 있어 이 메서드에만 쓰기
+     * 트랜잭션을 다시 지정한다. 빠뜨리면 변경이 플러시되지 않고 <b>조용히 사라진다</b> — 호출자는
+     * void 를 받으므로 실패를 알 방법이 없다.
+     *
+     * <p>조회 두 건과 마찬가지로 없는 티켓에 예외를 던지지 않는다. 호출자는 결과와 무관하게 같은
+     * 응답을 주어야 하므로 예외가 올라가면 응답이 갈라져 티켓 존재 여부가 드러난다.
+     */
     @Override
+    @Transactional
     public void updateGuestPassword(Long ticketId, String passwordHash) {
-        log.info("[stub] updateGuestPassword ticketId={} — S2 구현 예정, 반영되지 않음", ticketId);
+        if (ticketId == null || passwordHash == null) {
+            return;
+        }
+        boolean applied = ticketRepository.findById(ticketId)
+                .map(ticket -> ticket.changeGuestPasswordHash(passwordHash))
+                .orElse(false);
+        // 해시는 로그에 남기지 않는다 — 자격증명이다 (docs/10 §3.3)
+        log.debug("[guest] updateGuestPassword ticketId={} applied={}", ticketId, applied);
     }
 }
