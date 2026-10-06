@@ -1,0 +1,13 @@
+# @owner PMJ — WebSocket/STOMP 설정 (docs/02 §6). application.yml 의 spring.config.import 로 읽힌다.
+# 엔드포인트·브로커 prefix·허용 출처는 WebSocketConfig 가 코드로 들고 있고(출처는 app.front-origin),
+# 이 파일은 WebSocket 을 켜면서 생기는 부수효과를 되돌리는 용도다.
+spring:
+  task:
+    execution:
+      # @EnableWebSocketMessageBroker 가 Executor 빈 3개(clientInbound·clientOutbound·brokerChannel)를
+      # 등록하는데, Boot 의 applicationTaskExecutor 자동 구성은 @ConditionalOnMissingBean(Executor.class)
+      # 라서 그 셋 때문에 backoff 되고 아예 만들어지지 않는다. 그러면 @Async(AI 분류·설문 리스너)가
+      # 공용 풀을 잃고 SimpleAsyncTaskExecutor 로 떨어져 application.yml 의 pool 설정과
+      # AsyncConfig 의 CallerRunsPolicy 가 조용히 무효가 된다(AsyncConfigTest 가 이것을 잡는다).
+      # force = 다른 Executor 빈이 있어도 자동 구성 풀을 만들고 @Async 의 기본으로 쓴다.
+      mode: force
