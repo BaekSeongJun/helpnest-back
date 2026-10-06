@@ -87,16 +87,32 @@ class DashboardApiTest {
         ticket("HN-DASH-5", agentB, "ASSIGNED", "ETC", true, "2019-12-15T00:00:00Z", null, null);
         // 미배정 접수 1건
         ticket("HN-DASH-6", null, "RECEIVED", "ETC", false, "2020-01-25T00:00:00Z", null, null);
+        // 설문: A 응답 5·4 + 미응답 1(평균 제외), 미배정 티켓 응답 4 → 전체 (5+4+4)/3 = 4.3, A 4.5, B 설문 없음 null
+        survey("HN-DASH-1", 5);
+        survey("HN-DASH-2", 4);
+        survey("HN-DASH-3", null);
+        survey("HN-DASH-6", 4);
+    }
+
+    // survey(백성준 소유) 는 SQL 로 시드. 미응답은 rating·submitted_at 이 NULL
+    private void survey(String ticketNo, Integer rating) {
+        jdbc.update("""
+                insert into survey(ticket_id, token, rating, sent_at, expires_at, submitted_at)
+                select ticket_id, 'dash-' || ticket_no, ?, now(), now() + interval '72 hours',
+                       case when ?::smallint is null then null else now() end
+                from ticket where ticket_no = ?
+                """, rating, rating, ticketNo);
     }
 
     @Test
-    @DisplayName("KPI·분포: 구간 내 접수 5건, SLA 위반 40%, 평균 첫 응답 60분, 미배정은 현재 기준 +1")
+    @DisplayName("KPI·분포: 구간 내 접수 5건, SLA 위반 40%, 평균 첫 응답 60분, 만족도 4.3, 미배정은 현재 기준 +1")
     void summaryNumbers() {
         Kpi kpi = repository.kpi(FROM, TO);
 
         assertThat(kpi.total()).isEqualTo(5);
         assertThat(kpi.slaBreachRate()).isEqualTo(40.0);
         assertThat(kpi.avgFirstResponseMin()).isEqualTo(60.0);
+        assertThat(kpi.avgRating()).isEqualTo(4.3);
         assertThat(repository.unassigned()).isEqualTo(unassignedBefore + 1);
         assertThat(repository.countByStatus(FROM, TO))
                 .containsExactlyInAnyOrderEntriesOf(Map.of("RESOLVED", 2L, "IN_PROGRESS", 1L, "ASSIGNED", 1L, "RECEIVED", 1L));
@@ -105,12 +121,12 @@ class DashboardApiTest {
     }
 
     @Test
-    @DisplayName("상담원별: 현재 담당·오늘 해결·평균·위반율, 티켓 0건 지표는 null")
+    @DisplayName("상담원별: 현재 담당·오늘 해결·평균·위반율·만족도(미응답 제외), 대상 없으면 null")
     void agentNumbers() {
         List<AgentStat> stats = repository.agents(FROM, TO, TODAY);
 
         assertThat(stats).filteredOn(s -> s.agentId().equals(agentA)).singleElement()
-                .isEqualTo(new AgentStat(agentA, "가상담", 0, 1, 1, 60.0, 3.0, 66.7, null));
+                .isEqualTo(new AgentStat(agentA, "가상담", 0, 1, 1, 60.0, 3.0, 66.7, 4.5));
         assertThat(stats).filteredOn(s -> s.agentId().equals(agentB)).singleElement()
                 .isEqualTo(new AgentStat(agentB, "나상담", 2, 0, 0, null, null, 0.0, null));
     }
@@ -169,8 +185,7 @@ class DashboardApiTest {
                 .andExpect(jsonPath("$.data.inProgressCount").value(1));
         mockMvc.perform(get("/api/dashboard/summary?period=7D").header(HttpHeaders.AUTHORIZATION, lead))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.total").isNumber())
-                .andExpect(jsonPath("$.data.avgRating").doesNotExist());
+                .andExpect(jsonPath("$.data.total").isNumber());
         mockMvc.perform(get("/api/dashboard/agents?period=1Y").header(HttpHeaders.AUTHORIZATION, lead))
                 .andExpect(status().isBadRequest());
     }
