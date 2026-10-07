@@ -1,0 +1,21 @@
+# @owner SSJ — EC2 systemd 유닛. /etc/systemd/system/helpnest-back.service 로 복사 (deploy/README.md)
+[Unit]
+Description=HelpNest backend (Spring Boot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=helpnest
+WorkingDirectory=/opt/helpnest
+Environment=SPRING_PROFILES_ACTIVE=prod
+# 비밀값은 이 파일에만 (chmod 600, owner root). 키 목록은 helpnest.env.example
+EnvironmentFile=/etc/helpnest/helpnest.env
+ExecStart=/usr/bin/java -Xms256m -Xmx1g -jar /opt/helpnest/helpnest-back.jar
+# 정상 종료(SIGTERM) 시 @Async 작업 마무리 대기(application.yml await-termination 30s) 보다 길게
+TimeoutStopSec=45
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
