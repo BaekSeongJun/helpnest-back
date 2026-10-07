@@ -10,10 +10,12 @@ import com.helpnest.domain.member.dto.ProfileUpdateRequest;
 import com.helpnest.domain.member.entity.Member;
 import com.helpnest.domain.member.entity.MemberRole;
 import com.helpnest.domain.member.error.MemberErrorCode;
+import com.helpnest.domain.member.event.AgentAvailabilityChangedEvent;
 import com.helpnest.domain.member.repository.MemberRepository;
 import com.helpnest.global.error.BusinessException;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +29,7 @@ public class MemberService {
     private final MemberRepository memberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ApplicationEventPublisher eventPublisher;
 
     public MemberResponse getMe(Long memberId) {
         return memberRepository.findById(memberId)
@@ -65,7 +68,11 @@ public class MemberService {
         if (member.getRole() != MemberRole.AGENT) {
             throw new BusinessException(MemberErrorCode.NOT_AGENT);
         }
-        member.changeAvailable(available);
+        // 값이 실제로 바뀐 경우만 알린다 — 같은 값 재토글로 대기열이 헛돌지 않게 (CR #90)
+        if (member.isAvailable() != available) {
+            member.changeAvailable(available);
+            eventPublisher.publishEvent(new AgentAvailabilityChangedEvent(memberId, available));
+        }
         return MemberResponse.from(member);
     }
 
