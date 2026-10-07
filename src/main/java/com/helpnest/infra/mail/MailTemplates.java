@@ -12,8 +12,9 @@ import org.springframework.web.util.HtmlUtils;
  */
 public final class MailTemplates {
 
-    // 메일 클라이언트는 CSS 변수를 못 읽음 → 디자인 토큰 --primary(oklch 0.511 0.262 276.966) 근사 hex
-    static final String PRIMARY = "#4f46e5";
+    // 메일 클라이언트는 CSS 변수를 못 읽음 → 디자인 토큰 --primary(oklch 0.546 0.215 262) 근사 hex (front #43)
+    // ponytail: 로고는 텍스트 헤더 유지, SVG 미지원 클라이언트가 있어 PNG 공개 URL(S3) 확정 후 <img> 추가
+    static final String PRIMARY = "#2563eb";
 
     static final int REPLY_PREVIEW_MAX = 200;
 
