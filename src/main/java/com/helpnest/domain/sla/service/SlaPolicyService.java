@@ -52,6 +52,8 @@ public class SlaPolicyService {
         policy.update(req.responseMinutes(), req.warningRatio());
         log.info("[sla] 정책 변경 priority={} responseMinutes={} warningRatio={}",
                 priority, req.responseMinutes(), req.warningRatio());
+        // updatedAt 은 flush 때 채워진다. 먼저 내보내지 않으면 응답에 수정 전 시각이 실린다
+        slaPolicyRepository.flush();
         return SlaPolicyResponse.from(policy);
     }
 }
