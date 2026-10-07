@@ -4,6 +4,8 @@ package com.helpnest.global.websocket;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -25,6 +27,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
+import com.helpnest.domain.chat.repository.ChatRoomRepository;
 import com.helpnest.global.security.JwtProperties;
 import com.helpnest.global.security.JwtProvider;
 
@@ -45,7 +48,8 @@ class StompAuthInterceptorTest {
     private static final SecretKey KEY = JwtProvider.secretKey("ws-test-secret-key-32bytes-minimum!!");
     private static final SecretKey OTHER_KEY = JwtProvider.secretKey("ws-other-secret-key-32bytes-minimum!");
 
-    private final StompAuthInterceptor interceptor = new StompAuthInterceptor(decoder(KEY));
+    private final ChatRoomRepository chatRooms = mock(ChatRoomRepository.class);
+    private final StompAuthInterceptor interceptor = new StompAuthInterceptor(decoder(KEY), chatRooms);
 
     private static JwtDecoder decoder(SecretKey key) {
         return NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
@@ -135,14 +139,60 @@ class StompAuthInterceptorTest {
                 .isInstanceOf(MessageDeliveryException.class);
     }
 
-    @Test
-    @DisplayName("CONNECT 외의 프레임은 검사하지 않고 통과시킨다 — 세션은 CONNECT 에서 한 번 확정된다")
-    void passesThroughNonConnectFrames() {
-        StompHeaderAccessor subscribe = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
-        subscribe.setLeaveMutable(true);
-        Message<byte[]> frame = message(subscribe);
+    /** CONNECT 를 통과한 세션의 SUBSCRIBE·SEND 프레임. 실제 런타임처럼 세션 사용자를 헤더에 싣는다 */
+    private static Message<byte[]> frame(StompCommand command, String destination, String memberId, String role) {
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(command);
+        accessor.setLeaveMutable(true);
+        accessor.setDestination(destination);
+        if (memberId != null) {
+            accessor.setUser(new StompAuthInterceptor.StompPrincipal(memberId, role));
+        }
+        return message(accessor);
+    }
 
-        assertThatCode(() -> interceptor.preSend(frame, null)).doesNotThrowAnyException();
-        assertThat(subscribe.getUser()).isNull();
+    @Test
+    @DisplayName("CONNECT 후 Principal 에 역할도 담긴다 — 콘솔 토픽 구독 판정에 쓴다")
+    void principalCarriesRole() {
+        StompHeaderAccessor accessor = connect("Bearer " + provider(KEY).createAccessToken(7L, "LEAD"));
+        interceptor.preSend(message(accessor), null);
+
+        assertThat(((StompAuthInterceptor.StompPrincipal) accessor.getUser()).role()).isEqualTo("LEAD");
+    }
+
+    @Test
+    @DisplayName("채팅방 토픽은 참여자만 구독한다 — 남의 대화를 엿볼 수 없다")
+    void chatTopicOnlyForParticipants() {
+        when(chatRooms.existsParticipant(10L, 7L)).thenReturn(true);
+
+        assertThatCode(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, "/topic/chat/10", "7", "CUSTOMER"), null))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, "/topic/chat/10", "8", "CUSTOMER"), null))
+                .isInstanceOf(MessageDeliveryException.class);
+        assertThatThrownBy(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, "/topic/chat/abc", "7", "CUSTOMER"), null))
+                .isInstanceOf(MessageDeliveryException.class);
+    }
+
+    @Test
+    @DisplayName("콘솔 토픽은 직원만, 개인 큐는 누구나, 목록에 없는 목적지는 거부")
+    void subscribeAllowList() {
+        assertThatCode(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, "/topic/console/tickets", "3", "AGENT"), null))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, "/topic/console/tickets", "7", "CUSTOMER"), null))
+                .isInstanceOf(MessageDeliveryException.class);
+        assertThatCode(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, "/user/queue/chat-status", "7", "CUSTOMER"), null))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, "/topic/anything", "3", "ADMIN"), null))
+                .isInstanceOf(MessageDeliveryException.class);
+        assertThatThrownBy(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, "/user/queue/chat-status", null, null), null))
+                .isInstanceOf(MessageDeliveryException.class);
+    }
+
+    @Test
+    @DisplayName("SEND 는 /app/** 만 — 브로커 토픽 직접 발행은 메시지 위조라 막는다")
+    void sendOnlyToApp() {
+        assertThatCode(() -> interceptor.preSend(frame(StompCommand.SEND, "/app/chat/10/send", "7", "CUSTOMER"), null))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> interceptor.preSend(frame(StompCommand.SEND, "/topic/chat/10", "7", "CUSTOMER"), null))
+                .isInstanceOf(MessageDeliveryException.class);
     }
 }

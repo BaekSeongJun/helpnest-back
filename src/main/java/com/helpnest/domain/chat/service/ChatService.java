@@ -11,8 +11,6 @@ import java.util.stream.Collectors;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.helpnest.domain.assignment.error.AssignErrorCode;
 import com.helpnest.domain.assignment.service.AssignmentService;
@@ -25,7 +23,10 @@ import com.helpnest.domain.chat.error.ChatErrorCode;
 import com.helpnest.domain.chat.repository.ChatMessageRepository;
 import com.helpnest.domain.chat.repository.ChatRoomRepository;
 import com.helpnest.domain.member.port.MemberQueryPort;
+import com.helpnest.domain.ticket.entity.ActorRole;
 import com.helpnest.domain.ticket.entity.Ticket;
+import com.helpnest.domain.ticket.entity.TicketStatus;
+import com.helpnest.domain.ticket.repository.TicketRepository;
 import com.helpnest.domain.ticket.service.TicketService;
 import com.helpnest.global.error.BusinessException;
 
@@ -59,6 +60,7 @@ public class ChatService {
     private final ChatRoomRepository roomRepository;
     private final ChatMessageRepository messageRepository;
     private final TicketService ticketService;
+    private final TicketRepository ticketRepository;
     private final AssignmentService assignmentService;
     private final MemberQueryPort memberQueryPort;
     private final SimpMessagingTemplate messagingTemplate;
@@ -146,6 +148,34 @@ public class ChatService {
         log.info("[chat] 대기 취소 roomId={}", roomId);
     }
 
+    /**
+     * 상담원의 채팅 종료 (PATCH /api/chat/rooms/{roomId}/close, FR-CHT-03). 담당 상담원만 닫는다.
+     *
+     * <p>{@code resolve} 면 티켓을 RESOLVED 로 보낸다. 상담원이 한 마디도 하지 않고 닫으면 티켓은
+     * 아직 ASSIGNED 인데 전이표에 ASSIGNED→RESOLVED 가 없으므로 IN_PROGRESS 를 거친다(통합 시나리오
+     * "ASSIGNED 에서 막히지 않음"). 첫 응답 시각은 남기지 않는다 — 대화 없이 닫은 것을 응답으로
+     * 기록하면 SLA 초과가 가려진다. 두 전이 모두 {@code changeStatus} 를 거쳐 이력·이벤트가 남는다.
+     */
+    @Transactional
+    public void close(Long roomId, Long agentId, boolean resolve) {
+        ChatRoom room = lockRoom(roomId);
+        if (!agentId.equals(room.getAgentId())) {
+            throw new BusinessException(ChatErrorCode.NOT_PARTICIPANT);
+        }
+        room.close(OffsetDateTime.now());
+
+        if (resolve) {
+            Ticket ticket = ticketRepository.findById(room.getTicketId()).orElseThrow();
+            if (ticket.getStatus() == TicketStatus.ASSIGNED) {
+                ticketService.changeStatus(ticket.getId(), TicketStatus.IN_PROGRESS, "채팅 종료", agentId, ActorRole.AGENT);
+            }
+            ticketService.changeStatus(ticket.getId(), TicketStatus.RESOLVED, "채팅 종료", agentId, ActorRole.AGENT);
+        }
+        push(room.getCustomerId(), new ChatStatusPayload(roomId, ChatRoomStatus.CLOSED.name(), null,
+                room.getQueuedAt(), null));
+        log.info("[chat] 종료 roomId={} resolve={}", roomId, resolve);
+    }
+
     /** 대기 중인 방 id (FIFO). 스케줄러가 이 순서로 연결을 시도한다 */
     public List<Long> waitingIds() {
         return roomRepository.findByStatusOrderByQueuedAtAscIdAsc(ChatRoomStatus.WAITING).stream()
@@ -194,27 +224,8 @@ public class ChatService {
         }
     }
 
-    /**
-     * 커밋 후 발송. {@code NotificationAdapter.push} 와 같은 이유 — 롤백된 연결을 고객이 OPEN 으로
-     * 받으면 존재하지 않는 대화방으로 들어간다. 발송 실패는 다음 스케줄러 주기가 다시 보낸다.
-     */
     private void push(Long customerId, ChatStatusPayload payload) {
-        Runnable send = () -> {
-            try {
-                messagingTemplate.convertAndSendToUser(String.valueOf(customerId), "/queue/chat-status", payload);
-            } catch (RuntimeException e) {
-                log.warn("[chat] 상태 발송 실패 roomId={} cause={}", payload.roomId(), e.toString());
-            }
-        };
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    send.run();
-                }
-            });
-            return;
-        }
-        send.run();
+        AfterCommit.send(() -> messagingTemplate.convertAndSendToUser(
+                String.valueOf(customerId), "/queue/chat-status", payload));
     }
 }
