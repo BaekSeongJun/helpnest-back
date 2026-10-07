@@ -92,7 +92,7 @@ class ChatRoomApiTest {
     }
 
     private ChatRoom roomOf(Long customerId) {
-        return roomRepository.findByCustomerIdOrderByIdDesc(customerId).getFirst();
+        return roomRepository.findTop50ByCustomerIdOrderByIdDesc(customerId).getFirst();
     }
 
     @Nested
@@ -139,7 +139,7 @@ class ChatRoomApiTest {
             requestChat(customer1Token);
             requestChat(customer1Token).andExpect(jsonPath("$.data.position").value(1));
 
-            assertThat(roomRepository.findByCustomerIdOrderByIdDesc(customer1)).hasSize(1);
+            assertThat(roomRepository.findTop50ByCustomerIdOrderByIdDesc(customer1)).hasSize(1);
         }
 
         @Test
