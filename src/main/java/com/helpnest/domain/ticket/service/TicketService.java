@@ -258,6 +258,24 @@ public class TicketService {
     }
 
     /**
+     * 상담원의 응답을 기록한다 — 공개 답변(TicketReplyService)과 채팅 메시지(FR-CHT-06)가 같이 쓴다.
+     *
+     * <p>첫 응답 시각은 한 번만 남고({@code Ticket.markFirstResponded}), ASSIGNED 면 IN_PROGRESS 로
+     * 전이한다. 전이는 {@link #changeStatus} 를 거쳐 검증·이력·이벤트가 빠지지 않게 한다. 채팅 티켓이
+     * 이 전이를 거쳐야 종료 시 RESOLVED 로 갈 수 있고, 첫 응답 시각이 남아야 SLA 초과로 잘못
+     * 표시되지 않는다.
+     */
+    @Transactional
+    public void recordFirstResponse(Long ticketId, Long actorId, ActorRole actorRole) {
+        Ticket ticket = ticketRepository.findByIdForUpdate(ticketId)
+                .orElseThrow(() -> new BusinessException(TicketErrorCode.NOT_FOUND));
+        ticket.markFirstResponded(OffsetDateTime.now());
+        if (ticket.getStatus() == TicketStatus.ASSIGNED) {
+            changeStatus(ticketId, TicketStatus.IN_PROGRESS, null, actorId, actorRole);
+        }
+    }
+
+    /**
      * 티켓 이력 목록 (GET /api/console/tickets/{id}/histories, CS-02 우측 패널).
      *
      * <p>이력이 없는 티켓은 있을 수 없지만(접수 시 CREATE 이력을 남긴다) 빈 목록을 404 로 바꾸지는

@@ -1,7 +1,6 @@
 // @owner PMJ
 package com.helpnest.domain.ticket.service;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Objects;
 
@@ -106,10 +105,7 @@ public class TicketReplyService {
         linkAttachments(req.attachmentIds(), ticketId, reply.getId());
 
         if (!internal) {
-            ticket.markFirstResponded(OffsetDateTime.now());
-            if (ticket.getStatus() == TicketStatus.ASSIGNED) {
-                ticketService.changeStatus(ticketId, TicketStatus.IN_PROGRESS, null, actorId, actorRole);
-            }
+            ticketService.recordFirstResponse(ticketId, actorId, actorRole);
         }
 
         eventPublisher.publishEvent(
