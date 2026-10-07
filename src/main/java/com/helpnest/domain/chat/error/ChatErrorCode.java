@@ -11,7 +11,11 @@ import com.helpnest.global.error.ErrorCode;
  */
 public enum ChatErrorCode implements ErrorCode {
 
-    INVALID_STATE(HttpStatus.CONFLICT, "CHAT_INVALID_STATE", "현재 채팅 상태에서는 처리할 수 없습니다.");
+    INVALID_STATE(HttpStatus.CONFLICT, "CHAT_INVALID_STATE", "현재 채팅 상태에서는 처리할 수 없습니다."),
+    NOT_FOUND(HttpStatus.NOT_FOUND, "CHAT_NOT_FOUND", "채팅방을 찾을 수 없습니다."),
+    NOT_PARTICIPANT(HttpStatus.FORBIDDEN, "CHAT_NOT_PARTICIPANT", "참여 중인 채팅방이 아닙니다."),
+    WAIT_NOT_EXPIRED(HttpStatus.CONFLICT, "CHAT_WAIT_NOT_EXPIRED", "대기 5분이 지난 뒤에 문의로 남길 수 있습니다."),
+    EMPTY_MESSAGES(HttpStatus.BAD_REQUEST, "CHAT_EMPTY_MESSAGES", "문의로 남길 메시지를 먼저 입력해 주세요.");
 
     private final HttpStatus status;
     private final String code;
