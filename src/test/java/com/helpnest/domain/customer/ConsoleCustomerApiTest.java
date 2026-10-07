@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.helpnest.domain.member.entity.Member;
+import com.helpnest.domain.member.entity.MemberRole;
 import com.helpnest.domain.member.repository.MemberRepository;
 import com.helpnest.domain.survey.service.SurveyService;
 import com.helpnest.domain.ticket.entity.Ticket;
@@ -32,8 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 묶음·요약·현재 티켓 제외·오류를 실제 보안 필터 체인으로 확인한다. 매 테스트가 롤백된다.
  *
  * <pre>
- * 회원(customer1): M1(5점) · M2(3점) · M3(미응답)  → 총 3건, 평균 4.0
- * 비회원(history@example.com): G1(4점, 주소 대문자 혼용) · G2(미응답, 소문자) → 총 2건, 평균 4.0
+ * 테스트 전용 회원: M1(5점) · M2(3점) · M3(미응답)  → 총 3건, 평균 4.0
+ * 비회원(history-test@example.com): G1(4점, 주소 대문자 혼용) · G2(미응답, 소문자) → 총 2건, 평균 4.0
  * </pre>
  */
 @SpringBootTest
@@ -42,7 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
 @DisplayName("고객 이력 API")
 class ConsoleCustomerApiTest {
 
-    private static final String GUEST_EMAIL = "history@example.com";
+    private static final String GUEST_EMAIL = "history-test@example.com";
 
     @Autowired
     MockMvc mockMvc;
@@ -59,11 +61,13 @@ class ConsoleCustomerApiTest {
 
     @BeforeEach
     void setUp() {
-        memberId = memberRepository.findByEmail("customer1@helpnest.local").orElseThrow().getId();
+        // 시드 회원(customer1)을 쓰면 로컬에서 그 계정으로 문의한 만큼 건수가 어긋난다 — 롤백되는 전용 회원을 만든다
+        memberId = memberRepository.save(Member.builder().email("history-member@example.com").password("x")
+                .name("이력회원").role(MemberRole.CUSTOMER).build()).getId();
         givenMember(5);
         givenMember(3);
         memberLastTicketId = givenMember(null);
-        guestFirstTicketId = givenGuest("History@Example.com", 4);
+        guestFirstTicketId = givenGuest("History-Test@Example.com", 4);
         givenGuest(GUEST_EMAIL, null);
     }
 
@@ -113,7 +117,7 @@ class ConsoleCustomerApiTest {
 
         assertThat(json.<Integer>read("$.data.summary.totalCount")).isEqualTo(3);
         assertThat(json.<Double>read("$.data.summary.avgRating")).isEqualTo(4.0); // (5+3)/2, 미응답 제외
-        assertThat(json.<String>read("$.data.customerName")).isEqualTo("정고객");
+        assertThat(json.<String>read("$.data.customerName")).isEqualTo("이력회원");
         assertThat(json.<Integer>read("$.data.tickets.totalElements")).isEqualTo(3);
         assertThat(json.<Integer>read("$.data.tickets.content[0].ticketId"))
                 .isEqualTo(memberLastTicketId.intValue()); // 최근순
@@ -137,7 +141,7 @@ class ConsoleCustomerApiTest {
         DocumentContext json = ok(asUser("agent1@helpnest.local",
                 "/api/console/customers/by-ticket/" + guestFirstTicketId));
 
-        assertThat(json.<String>read("$.data.customerKey")).isEqualTo("G-History@Example.com");
+        assertThat(json.<String>read("$.data.customerKey")).isEqualTo("G-History-Test@Example.com");
         assertThat(json.<Integer>read("$.data.summary.totalCount")).isEqualTo(2);
         assertThat(json.<Integer>read("$.data.tickets.totalElements")).isEqualTo(1);
         assertThat(json.<java.util.List<Integer>>read("$.data.tickets.content[*].ticketId"))
