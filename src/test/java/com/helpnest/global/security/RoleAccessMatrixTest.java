@@ -26,7 +26,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  *
  * <p>허용 역할은 401·403 이 아니면 통과(없는 id·빈 본문이라 404·400 이 나와도 권한은 통과한 것),
  * 금지 역할은 비로그인 401 · 로그인했으나 역할 부족 403 이어야 한다. 존재하지 않는 id 로만 쳐서
- * 데이터가 바뀌지 않는다. 채팅·고객 이력은 아직 dev 에 없어 구현되면 행을 추가한다.
+ * 데이터가 바뀌지 않는다. 허용 역할로 치면 데이터가 생기는 경로는 {@code deniedOnly} 로 거부 역할만 친다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -67,6 +67,14 @@ class RoleAccessMatrixTest {
                 row("PATCH", "/api/notifications/" + NO_SUCH_ID + "/read", MEMBERS),
                 row("PATCH", "/api/notifications/read-all", MEMBERS),
                 row("GET", "/api/tickets/my", EnumSet.of(Who.CUSTOMER)),   // 04 §7 고객 전용 (CR #75)
+                // 04 §10 채팅 (CR #89). 권한이 메서드마다 따로 붙어 경로마다 행을 둔다.
+                // 방 생성은 고객이 치면 방이 커밋되고 대기열 연결까지 일어나 거부 역할만 친다 — 고객 허용은 ChatRoomApiTest 가 검증
+                deniedOnly("POST", "/api/chat/rooms", EnumSet.of(Who.CUSTOMER)),
+                row("POST", "/api/chat/rooms/" + NO_SUCH_ID + "/convert", "{}", EnumSet.of(Who.CUSTOMER)),
+                row("DELETE", "/api/chat/rooms/" + NO_SUCH_ID, EnumSet.of(Who.CUSTOMER)),
+                row("GET", "/api/chat/rooms", MEMBERS),   // 고객은 본인 방, 상담원 이상은 담당 방
+                row("GET", "/api/chat/rooms/" + NO_SUCH_ID + "/messages", MEMBERS),
+                row("PATCH", "/api/chat/rooms/" + NO_SUCH_ID + "/close", "{}", AGENT_UP),
                 // 상담원 이상
                 row("GET", "/api/console/agents", AGENT_UP),
                 row("GET", "/api/templates", AGENT_UP),
@@ -76,6 +84,8 @@ class RoleAccessMatrixTest {
                 row("GET", t + "/ai/drafts", AGENT_UP),
                 row("GET", "/api/console/surveys", AGENT_UP),
                 row("GET", "/api/console/surveys/summary", AGENT_UP),
+                row("GET", "/api/console/customers/by-ticket/" + NO_SUCH_ID, AGENT_UP),
+                row("GET", "/api/console/customers/M-" + NO_SUCH_ID + "/tickets", AGENT_UP),
                 row("GET", "/api/dashboard/agents/me", AGENT_UP),
                 // 팀장 이상
                 row("PATCH", t + "/assign", "{\"agentId\":1}", LEAD_UP),
@@ -99,6 +109,11 @@ class RoleAccessMatrixTest {
 
     private static Stream<Arguments> row(String method, String path, Set<Who> allowed) {
         return row(method, path, null, allowed);
+    }
+
+    /** 허용 역할로 치면 데이터가 생기는 경로용: 거부되어야 하는 역할만 펼친다 */
+    private static Stream<Arguments> deniedOnly(String method, String path, Set<Who> allowed) {
+        return row(method, path, null, allowed).filter(args -> !(boolean) args.get()[4]);
     }
 
     /** 한 엔드포인트를 역할 6종으로 펼친다 */

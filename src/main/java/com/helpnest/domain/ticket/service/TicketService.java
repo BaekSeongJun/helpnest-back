@@ -99,6 +99,40 @@ public class TicketService {
                 .firstResponseDueAt(defaultPolicy().calculateDueAt(now))
                 .build());
 
+        linkAttachments(req.attachmentIds(), ticket.getId());
+        registerCreated(ticket, customerId);
+        log.info("[ticket] 접수 ticketNo={} member={} guest={}", ticket.getTicketNo(), customerId,
+                guest != null);
+        return TicketCreateResponse.from(ticket);
+    }
+
+    /**
+     * 채팅에서 티켓을 만든다 (FR-CHT-01·05). 상담원 연결 시와 "문의로 남기기" 전환 시 두 경로가 쓴다.
+     *
+     * <p>웹 접수와 똑같이 RECEIVED 로 시작하고 CREATE 이력·{@link TicketCreatedEvent} 를 남긴다 —
+     * AI 분류도 똑같이 돈다. 연결 경로는 호출자가 이어서 {@code AssignmentService.autoAssign} 으로
+     * 즉시 ASSIGNED 로 만들고, 그 뒤 분류 리스너의 autoAssign 은 RECEIVED 가드에 걸려 재배정하지
+     * 않는다(FR-CHT-06). 전환 경로는 배정 없이 남겨 분류 리스너가 일반 문의처럼 배정한다.
+     *
+     * @param content 대기 중 고객이 보낸 메시지 합본. 비어 있으면 기본 문구를 넣는다(content NOT NULL)
+     */
+    @Transactional
+    public Ticket createChatTicket(Long customerId, String content) {
+        Ticket ticket = ticketRepository.save(Ticket.builder()
+                .ticketNo(ticketNoGenerator.generate(OffsetDateTime.now()))
+                .customerId(customerId)
+                .title("채팅 상담")
+                .content(content == null || content.isBlank() ? "채팅 상담 요청" : content)
+                .channel(TicketChannel.CHAT)
+                .firstResponseDueAt(defaultPolicy().calculateDueAt(OffsetDateTime.now()))
+                .build());
+        registerCreated(ticket, customerId);
+        log.info("[ticket] 채팅 접수 ticketNo={} member={}", ticket.getTicketNo(), customerId);
+        return ticket;
+    }
+
+    /** CREATE 이력 + 접수 이벤트. 접수 경로가 무엇이든 이 둘은 항상 함께 남아야 한다 */
+    private void registerCreated(Ticket ticket, Long customerId) {
         ticketHistoryRepository.save(TicketHistory.builder()
                 .ticketId(ticket.getId())
                 .action(HistoryAction.CREATE)
@@ -106,13 +140,7 @@ public class TicketService {
                 .actorId(customerId)
                 .actorType(customerId != null ? ActorType.MEMBER : ActorType.GUEST)
                 .build());
-
-        linkAttachments(req.attachmentIds(), ticket.getId());
-
         eventPublisher.publishEvent(new TicketCreatedEvent(ticket.getId()));
-        log.info("[ticket] 접수 ticketNo={} member={} guest={}", ticket.getTicketNo(), customerId,
-                guest != null);
-        return TicketCreateResponse.from(ticket);
     }
 
     /**
@@ -227,6 +255,24 @@ public class TicketService {
                 new TicketStatusChangedEvent(ticket.getId(), from, toStatus, actorId));
         log.info("[ticket] 상태 변경 ticketNo={} {} -> {} by={}", ticket.getTicketNo(), from,
                 toStatus, actorId);
+    }
+
+    /**
+     * 상담원의 응답을 기록한다 — 공개 답변(TicketReplyService)과 채팅 메시지(FR-CHT-06)가 같이 쓴다.
+     *
+     * <p>첫 응답 시각은 한 번만 남고({@code Ticket.markFirstResponded}), ASSIGNED 면 IN_PROGRESS 로
+     * 전이한다. 전이는 {@link #changeStatus} 를 거쳐 검증·이력·이벤트가 빠지지 않게 한다. 채팅 티켓이
+     * 이 전이를 거쳐야 종료 시 RESOLVED 로 갈 수 있고, 첫 응답 시각이 남아야 SLA 초과로 잘못
+     * 표시되지 않는다.
+     */
+    @Transactional
+    public void recordFirstResponse(Long ticketId, Long actorId, ActorRole actorRole) {
+        Ticket ticket = ticketRepository.findByIdForUpdate(ticketId)
+                .orElseThrow(() -> new BusinessException(TicketErrorCode.NOT_FOUND));
+        ticket.markFirstResponded(OffsetDateTime.now());
+        if (ticket.getStatus() == TicketStatus.ASSIGNED) {
+            changeStatus(ticketId, TicketStatus.IN_PROGRESS, null, actorId, actorRole);
+        }
     }
 
     /**
