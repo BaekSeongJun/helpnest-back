@@ -12,6 +12,7 @@ import com.helpnest.domain.auth.entity.RefreshToken;
 import com.helpnest.domain.auth.repository.RefreshTokenRepository;
 import com.helpnest.domain.member.entity.Member;
 import com.helpnest.domain.member.entity.MemberRole;
+import com.helpnest.domain.member.event.AgentAvailabilityChangedEvent;
 import com.helpnest.domain.member.entity.MemberStatus;
 import com.helpnest.domain.member.repository.MemberRepository;
 import com.helpnest.global.security.JwtProvider;
@@ -24,6 +25,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@RecordApplicationEvents
 class AdminMemberFlowTest {
 
     @Autowired
@@ -42,6 +46,8 @@ class AdminMemberFlowTest {
     RefreshTokenRepository refreshTokenRepository;
     @Autowired
     JwtProvider jwtProvider;
+    @Autowired
+    ApplicationEvents events;
 
     Member admin;
     Member lead;
@@ -115,6 +121,19 @@ class AdminMemberFlowTest {
         availability(lead, true).andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("MEMBER_NOT_AGENT"));
         availability(customer, true).andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("상담 가능 값이 실제로 바뀔 때만 이벤트를 발행한다 (CR #90)")
+    void availabilityEvent() throws Exception {
+        availability(agent, true).andExpect(status().isOk());
+        availability(agent, true).andExpect(status().isOk());   // 같은 값 → 발행 안 함
+        availability(agent, false).andExpect(status().isOk());
+        availability(lead, true).andExpect(status().isForbidden());   // 거부 → 발행 안 함
+
+        assertThat(events.stream(AgentAvailabilityChangedEvent.class))
+                .containsExactly(new AgentAvailabilityChangedEvent(agent.getId(), true),
+                        new AgentAvailabilityChangedEvent(agent.getId(), false));
     }
 
     private ResultActions create(Member by, String role) throws Exception {
