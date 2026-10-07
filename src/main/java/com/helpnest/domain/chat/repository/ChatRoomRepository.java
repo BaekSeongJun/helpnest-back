@@ -31,9 +31,10 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
     /** 고객의 진행 중 방(WAITING·OPEN). 채팅 요청을 중복으로 눌러도 방은 하나만 쓴다. */
     Optional<ChatRoom> findFirstByCustomerIdAndStatusIn(Long customerId, Collection<ChatRoomStatus> statuses);
 
-    List<ChatRoom> findByCustomerIdOrderByIdDesc(Long customerId);
+    /** 목록 화면용 최근 50개. 오래된 상담은 티켓으로 남아 있어 여기서 끝까지 보여 줄 필요가 없다 */
+    List<ChatRoom> findTop50ByCustomerIdOrderByIdDesc(Long customerId);
 
-    List<ChatRoom> findByAgentIdOrderByIdDesc(Long agentId);
+    List<ChatRoom> findTop50ByAgentIdOrderByIdDesc(Long agentId);
 
     /** STOMP SUBSCRIBE·SEND 검증용. 방 전체를 읽지 않고 참여 여부만 본다. */
     @Query("""

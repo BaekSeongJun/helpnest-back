@@ -2,6 +2,7 @@
 package com.helpnest.global.websocket;
 
 import java.security.Principal;
+import java.util.Set;
 
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -15,6 +16,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.stereotype.Component;
 
+import com.helpnest.domain.chat.repository.ChatRoomRepository;
 import com.helpnest.global.security.JwtProvider;
 
 import lombok.RequiredArgsConstructor;
@@ -41,6 +43,16 @@ import lombok.extern.slf4j.Slf4j;
  * 비회원은 개인 알림 대상이 아니다 — {@code notification.receiver_id} 가 member 를 FK 로
  * 참조하므로 받을 행 자체가 만들어지지 않는다. 연결을 허용하면 아무것도 오지 않는 소켓을
  * 붙여 두는 셈이라 CONNECT 에서 끊는다.
+ *
+ * <h2>SUBSCRIBE·SEND 도 막는다 (S3 채팅)</h2>
+ * SimpleBroker 는 목적지만 맞으면 누구에게나 구독을 열어 주고, 클라이언트가 {@code /topic/...} 으로
+ * 직접 SEND 하면 서버 코드를 거치지 않고 그대로 구독자에게 뿌린다. 막지 않으면
+ * <ul>
+ *   <li>로그인한 아무나 {@code /topic/chat/{남의 방}} 을 구독해 대화를 엿보고,</li>
+ *   <li>{@code /topic/chat/{방}} 으로 직접 SEND 해 저장·검증 없이 가짜 메시지를 끼워 넣는다.</li>
+ * </ul>
+ * 그래서 SEND 는 {@code /app/**}(서버 핸들러 경유)만, SUBSCRIBE 는 아래 허용 목록만 통과시킨다.
+ * 목록에 없는 목적지는 거부한다 — 새 토픽을 열 때 여기에 규칙을 추가해야 동작한다.
  */
 @Slf4j
 @Component
@@ -48,27 +60,79 @@ import lombok.extern.slf4j.Slf4j;
 public class StompAuthInterceptor implements ChannelInterceptor {
 
     private static final String BEARER = "Bearer ";
+    private static final String CHAT_TOPIC = "/topic/chat/";
+    private static final Set<String> STAFF_ROLES = Set.of("AGENT", "LEAD", "ADMIN");
 
     private final JwtDecoder jwtDecoder;
+    private final ChatRoomRepository chatRoomRepository;
 
     /**
-     * CONNECT 외의 프레임(SUBSCRIBE·SEND·DISCONNECT)은 그대로 통과시킨다. 세션 사용자는
-     * CONNECT 에서 한 번 확정되고 이후 프레임은 같은 세션을 쓰므로 매 프레임 검증할 필요가 없다.
+     * CONNECT 에서 토큰을 검증해 세션 사용자를 확정하고, SUBSCRIBE·SEND 는 그 사용자로 목적지를
+     * 판정한다(클래스 주석). 토큰은 CONNECT 에서 한 번만 본다 — 이후 프레임은 같은 세션이다.
      *
-     * <p>토큰이 CONNECT 이후 만료되면 연결은 유지된다. 알림은 읽기 전용 수신이고 민감한 조작은
-     * 전부 REST 를 거치므로 허용 가능한 범위다.
-     *
-     * <p>ponytail: 세션 수명을 토큰 수명에 맞춰야 하면 하트비트에 재검증을 붙이거나 만료 시각에
-     * 맞춰 세션을 끊는다. 지금은 채팅(S3)이 붙기 전이라 수신 전용이다.
+     * <p>ponytail: 토큰이 CONNECT 이후 만료돼도 세션은 유지되고 채팅 송신도 계속된다(최대 Access
+     * 토큰 수명 30분 + 재연결 전까지). 세션 수명을 토큰에 맞춰야 하면 만료 시각에 세션을 끊는다.
      */
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
         StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
-        if (accessor == null || StompCommand.CONNECT != accessor.getCommand()) {
+        if (accessor == null || accessor.getCommand() == null) {
             return message;
         }
-        accessor.setUser(authenticate(accessor, message));
+        switch (accessor.getCommand()) {
+            case CONNECT -> accessor.setUser(authenticate(accessor, message));
+            case SUBSCRIBE -> authorizeSubscribe(accessor, message);
+            case SEND -> authorizeSend(accessor, message);
+            default -> { }
+        }
         return message;
+    }
+
+    /**
+     * 구독 허용 목록. {@code /user/queue/**} 는 Spring 이 세션 사용자 전용 목적지로 바꾸므로 남의 큐를
+     * 구독할 수 없다. 채팅방은 참여자만, 콘솔 토픽은 직원만 받는다.
+     */
+    private void authorizeSubscribe(StompHeaderAccessor accessor, Message<?> message) {
+        String destination = accessor.getDestination();
+        StompPrincipal user = principal(accessor, message);
+        if (destination == null) {
+            throw reject(message, "구독 목적지 없음");
+        }
+        if (destination.startsWith("/user/queue/")) {
+            return;
+        }
+        if (destination.startsWith("/topic/console/") && STAFF_ROLES.contains(user.role())) {
+            return;
+        }
+        if (destination.startsWith(CHAT_TOPIC) && isChatParticipant(destination, user)) {
+            return;
+        }
+        throw reject(message, "구독 거부 destination=%s memberId=%s".formatted(destination, user.name()));
+    }
+
+    private boolean isChatParticipant(String destination, StompPrincipal user) {
+        try {
+            Long roomId = Long.valueOf(destination.substring(CHAT_TOPIC.length()));
+            return chatRoomRepository.existsParticipant(roomId, Long.valueOf(user.name()));
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    /** 클라이언트는 서버 핸들러({@code /app/**})로만 보낸다. 브로커 목적지 직접 발행은 위조다 */
+    private void authorizeSend(StompHeaderAccessor accessor, Message<?> message) {
+        String destination = accessor.getDestination();
+        if (destination == null || !destination.startsWith("/app/")) {
+            throw reject(message, "SEND 거부 destination=" + destination);
+        }
+    }
+
+    /** CONNECT 를 통과한 세션이면 항상 있다. 없으면 인증 없이 들어온 프레임이다 */
+    private StompPrincipal principal(StompHeaderAccessor accessor, Message<?> message) {
+        if (accessor.getUser() instanceof StompPrincipal user) {
+            return user;
+        }
+        throw reject(message, "인증되지 않은 세션");
     }
 
     private Principal authenticate(StompHeaderAccessor accessor, Message<?> message) {
@@ -91,7 +155,7 @@ public class StompAuthInterceptor implements ChannelInterceptor {
 
         Long memberId = JwtProvider.memberId(jwt);
         log.debug("[ws] CONNECT 허용 memberId={}", memberId);
-        return new StompPrincipal(String.valueOf(memberId));
+        return new StompPrincipal(String.valueOf(memberId), jwt.getClaimAsString(JwtProvider.ROLE_CLAIM));
     }
 
     /**
@@ -106,10 +170,10 @@ public class StompAuthInterceptor implements ChannelInterceptor {
 
     /**
      * {@code /user/...} 라우팅이 쓰는 이름만 담는 최소 구현. Spring Security 의
-     * {@code Authentication} 을 쓰지 않는 이유는 지금 필요한 것이 이름 하나뿐이고,
-     * {@code @MessageMapping} 엔드포인트가 없어 권한 판정 대상이 없기 때문이다(채팅은 S3).
+     * {@code Authentication} 을 쓰지 않는 이유는 필요한 것이 이름과 역할 두 개뿐이기 때문이다.
+     * 역할은 구독 판정(콘솔 토픽은 직원만)에 쓴다.
      */
-    record StompPrincipal(String name) implements Principal {
+    record StompPrincipal(String name, String role) implements Principal {
 
         @Override
         public String getName() {

@@ -15,6 +15,7 @@ public enum ChatErrorCode implements ErrorCode {
     NOT_FOUND(HttpStatus.NOT_FOUND, "CHAT_NOT_FOUND", "채팅방을 찾을 수 없습니다."),
     NOT_PARTICIPANT(HttpStatus.FORBIDDEN, "CHAT_NOT_PARTICIPANT", "참여 중인 채팅방이 아닙니다."),
     WAIT_NOT_EXPIRED(HttpStatus.CONFLICT, "CHAT_WAIT_NOT_EXPIRED", "대기 5분이 지난 뒤에 문의로 남길 수 있습니다."),
+    INVALID_CONTENT(HttpStatus.BAD_REQUEST, "CHAT_INVALID_CONTENT", "메시지는 1~5,000자로 입력해 주세요."),
     EMPTY_MESSAGES(HttpStatus.BAD_REQUEST, "CHAT_EMPTY_MESSAGES", "문의로 남길 메시지를 먼저 입력해 주세요.");
 
     private final HttpStatus status;
