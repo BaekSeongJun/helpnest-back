@@ -45,7 +45,8 @@ jwt:
   refresh-cookie-secure: ${REFRESH_COOKIE_SECURE:true}   # 로컬 http 개발 시 false
 
 app:
-  front-origin: ${FRONT_ORIGIN:http://localhost:3000}   # CORS 허용 (/api/attachments, /ws 만)
+  # CORS 허용(/api/attachments, /ws 만)·메일 링크. 운영은 Amplify 도메인 필수 — 기본값을 두지 않아 빠뜨리면 기동 실패
+  front-origin: ${FRONT_ORIGIN}
 
 server:
   forward-headers-strategy: framework   # 프록시·CloudFront 뒤 실제 클라이언트 IP 사용 (docs/02 §2.1)
