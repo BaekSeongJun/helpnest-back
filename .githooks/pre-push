@@ -1,25 +1,37 @@
 #!/bin/sh
 # @owner BSJ — push 전 pull 확인 (docs/01 §3.3). 활성화: git config core.hooksPath .githooks
-branch=$(git rev-parse --abbrev-ref HEAD)
-
-if [ "$branch" = "main" ] || [ "$branch" = "dev" ]; then
-  echo "[ERROR] $branch 브랜치에 직접 push 할 수 없습니다. PR을 사용하세요."
-  exit 1
-fi
+# git 이 stdin 으로 push 대상마다 "<로컬 ref> <로컬 sha> <원격 ref> <원격 sha>" 를 준다.
+# 체크아웃 브랜치(HEAD)가 아니라 이 값으로 판단한다 — feature/x:dev 같은 refspec push·원격 브랜치 삭제 (back #108)
+z=0000000000000000000000000000000000000000
+targets=""
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/dev)
+      echo "[ERROR] ${remote_ref#refs/heads/} 브랜치에 직접 push 할 수 없습니다. PR을 사용하세요."
+      exit 1 ;;
+  esac
+  # 원격 브랜치 삭제는 pull 확인이 필요 없다
+  [ "$local_sha" = "$z" ] && continue
+  targets="$targets $local_sha:${remote_ref#refs/heads/}"
+done
+[ -z "$targets" ] && exit 0
 
 git fetch origin --quiet
 
-if git rev-parse --verify --quiet "origin/$branch" >/dev/null; then
-  behind=$(git rev-list --count "HEAD..origin/$branch")
-  if [ "$behind" -gt 0 ]; then
-    echo "[ERROR] origin/$branch 에 새 커밋 ${behind}개. 먼저 git pull origin $branch"
+for t in $targets; do
+  sha=${t%%:*}
+  branch=${t#*:}
+  if git rev-parse --verify --quiet "origin/$branch" >/dev/null; then
+    behind=$(git rev-list --count "$sha..origin/$branch")
+    if [ "$behind" -gt 0 ]; then
+      echo "[ERROR] origin/$branch 에 새 커밋 ${behind}개. 먼저 git pull origin $branch"
+      exit 1
+    fi
+  fi
+  behind_dev=$(git rev-list --count "$sha..origin/dev")
+  if [ "$behind_dev" -gt 0 ]; then
+    echo "[ERROR] origin/dev 에 새 커밋 ${behind_dev}개. 먼저 git pull origin dev 후 빌드 확인"
     exit 1
   fi
-fi
-
-behind_dev=$(git rev-list --count "HEAD..origin/dev")
-if [ "$behind_dev" -gt 0 ]; then
-  echo "[ERROR] origin/dev 에 새 커밋 ${behind_dev}개. 먼저 git pull origin dev 후 빌드 확인"
-  exit 1
-fi
+done
 echo "[OK] pull 할 내용 없음. push 진행"
