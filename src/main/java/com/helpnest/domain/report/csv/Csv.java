@@ -16,7 +16,12 @@ import org.springframework.http.ResponseEntity;
 public final class Csv {
 
     private static final byte[] BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
-    private static final MediaType TEXT_CSV = new MediaType("text", "csv", StandardCharsets.UTF_8);
+    /**
+     * text/csv 로 보내면 Amplify(Next rewrites) 프록시가 본문을 문자열로 다시 써서 BOM 3바이트를 지우고
+     * Content-Length 는 그대로 둔다 → 브라우저가 남은 3바이트를 기다리며 다운로드가 끝나지 않는다(운영 확인).
+     * 바이너리 타입으로 보내 프록시가 본문을 건드리지 않게 한다. 파일 이름은 Content-Disposition 이 정한다.
+     */
+    private static final MediaType CSV_DOWNLOAD = MediaType.APPLICATION_OCTET_STREAM;
 
     /** 엑셀 사용자용 유형 라벨 (프론트 config/badge.ts CATEGORY_LABEL 과 같은 값) */
     private static final Map<String, String> CATEGORY_LABEL = Map.of(
@@ -48,7 +53,7 @@ public final class Csv {
                 .build();
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
-                .contentType(TEXT_CSV)
+                .contentType(CSV_DOWNLOAD)
                 .body(csv);
     }
 
