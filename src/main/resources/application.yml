@@ -47,9 +47,11 @@ jwt:
 app:
   # CORS 허용(/api/attachments, /ws 만)·메일 링크. 운영은 Amplify 도메인 필수 — 기본값을 두지 않아 빠뜨리면 기동 실패
   front-origin: ${FRONT_ORIGIN}
+  # 프론트 proxy.ts 와 같은 값. 맞을 때만 Amplify 경유로 보고 XFF 오른쪽 3번째를 클라이언트 IP 로 쓴다(RateLimitFilter, back #105). 비면 직접 호출로만 본다
+  proxy-secret: ${PROXY_SECRET:}
 
 server:
-  forward-headers-strategy: framework   # 프록시·CloudFront 뒤 실제 클라이언트 IP 사용 (docs/02 §2.1)
+  forward-headers-strategy: none   # XFF 원문을 RateLimitFilter 가 직접 해석한다 — framework 는 위조 가능한 가장 왼쪽 값을 쓴다(back #105)
 
 management:
   endpoints:
