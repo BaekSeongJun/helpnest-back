@@ -147,7 +147,7 @@ class ReportApiTest {
         byte[] body = mockMvc.perform(get("/api/reports/monthly/export?month=2020-01")
                         .header(HttpHeaders.AUTHORIZATION, lead))
                 .andExpect(status().isOk())
-                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, "text/csv;charset=UTF-8"))
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/octet-stream"))
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
                         containsString("filename=\"helpnest_report_2020-01.csv\"")))
                 .andReturn().getResponse().getContentAsByteArray();
