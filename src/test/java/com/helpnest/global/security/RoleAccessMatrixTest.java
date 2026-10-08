@@ -93,6 +93,7 @@ class RoleAccessMatrixTest {
                 row("GET", "/api/dashboard/summary", LEAD_UP),
                 row("GET", "/api/dashboard/agents", LEAD_UP),
                 row("GET", "/api/dashboard/agents/export", LEAD_UP),
+                row("GET", "/api/dashboard/agents/" + NO_SUCH_ID + "/detail", LEAD_UP),
                 row("GET", "/api/reports/monthly", LEAD_UP),
                 row("GET", "/api/reports/monthly/export", LEAD_UP),
                 row("GET", "/api/admin/faqs", LEAD_UP),

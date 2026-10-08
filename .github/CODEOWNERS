@@ -8,6 +8,7 @@
 /src/main/resources/application-ws.yml          @totot03
 /src/main/java/com/helpnest/domain/ai/          @s-sujin-99
 /src/main/java/com/helpnest/domain/dashboard/   @s-sujin-99
+/src/main/java/com/helpnest/domain/dashboard/agent/ @BaekSeongJun
 /src/main/java/com/helpnest/domain/report/      @s-sujin-99
 /src/main/java/com/helpnest/infra/              @s-sujin-99
 /src/main/resources/application-ai.yml          @s-sujin-99
