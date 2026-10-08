@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -287,29 +288,31 @@ public class TicketService {
         }
         List<TicketHistory> histories = ticketHistoryRepository
                 .findByTicketIdOrderByCreatedAtAsc(ticketId);
-        Map<Long, String> names = actorNames(histories);
+        Map<Long, String> names = memberNames(histories);
 
         return histories.stream()
                 .map(h -> new TicketHistoryResponse(h.getId(), h.getAction(), h.getFromValue(),
-                        h.getToValue(), nameOf(names, h.getActorId()), h.getActorType(),
-                        h.getMemo(), h.getCreatedAt()))
+                        h.getToValue(), agentName(names, h, h.getFromValue()),
+                        agentName(names, h, h.getToValue()), nameOf(names, h.getActorId()),
+                        h.getActorType(), h.getMemo(), h.getCreatedAt()))
                 .toList();
     }
 
     /**
-     * 이력에 등장하는 수행자들의 이름을 한 번에 읽는다. 건당 포트 호출이면 N+1 이 되고,
-     * 탈퇴 등으로 조회되지 않는 수행자가 있으면 이력 조회 전체가 실패한다
+     * 이력에 등장하는 회원(수행자 + 배정 이력의 전·후 상담원) 이름을 한 번에 읽는다. 건당 포트 호출이면
+     * N+1 이 되고, 탈퇴 등으로 조회되지 않는 수행자가 있으면 이력 조회 전체가 실패한다
      * ({@link MemberNameLookupRepository} 주석).
      */
-    private Map<Long, String> actorNames(List<TicketHistory> histories) {
-        Set<Long> actorIds = histories.stream()
-                .map(TicketHistory::getActorId)
+    private Map<Long, String> memberNames(List<TicketHistory> histories) {
+        Set<Long> memberIds = histories.stream()
+                .flatMap(h -> Stream.of(h.getActorId(), assigneeId(h, h.getFromValue()),
+                        assigneeId(h, h.getToValue())))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        if (actorIds.isEmpty()) {
+        if (memberIds.isEmpty()) {
             return Map.of();
         }
-        return memberNameLookupRepository.findNames(actorIds).stream()
+        return memberNameLookupRepository.findNames(memberIds).stream()
                 .collect(Collectors.toMap(MemberName::getMemberId, MemberName::getName));
     }
 
@@ -319,5 +322,18 @@ public class TicketService {
      */
     private static String nameOf(Map<Long, String> names, Long actorId) {
         return actorId == null ? null : names.get(actorId);
+    }
+
+    private static String agentName(Map<Long, String> names, TicketHistory h, String value) {
+        return nameOf(names, assigneeId(h, value));
+    }
+
+    /** 배정 이력의 값만 member_id 다. 숫자가 아니면(손상 데이터) 이름 없이 둔다 — 이력 조회 전체를 깨지 않는다 */
+    private static Long assigneeId(TicketHistory h, String value) {
+        boolean assign = h.getAction() == HistoryAction.ASSIGN || h.getAction() == HistoryAction.REASSIGN;
+        if (!assign || value == null || value.isEmpty() || !value.chars().allMatch(Character::isDigit)) {
+            return null;
+        }
+        return Long.valueOf(value);
     }
 }

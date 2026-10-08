@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +28,7 @@ import com.helpnest.domain.sla.entity.SlaPolicy;
 import com.helpnest.domain.sla.repository.SlaPolicyRepository;
 import com.helpnest.domain.ticket.entity.TicketPriority;
 import com.helpnest.global.security.JwtProvider;
+import com.jayway.jsonpath.JsonPath;
 
 /**
  * SLA 정책 관리 API (docs/04 §8). 조회는 LEAD+, 수정은 ADMIN.
@@ -76,13 +78,21 @@ class AdminSlaPolicyApiTest {
     @Test
     @DisplayName("수정: ADMIN 이 기한·비율을 바꾸면 저장되고 임박 분도 같이 달라진다")
     void update() throws Exception {
-        mockMvc.perform(put("/api/admin/sla-policies/{priority}", TicketPriority.URGENT)
+        OffsetDateTime before = slaPolicyRepository.findById(TicketPriority.URGENT).orElseThrow().getUpdatedAt();
+
+        String body = mockMvc.perform(put("/api/admin/sla-policies/{priority}", TicketPriority.URGENT)
                         .header(HttpHeaders.AUTHORIZATION, bearer(admin))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"responseMinutes\":30,\"warningRatio\":0.50}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.responseMinutes").value(30))
-                .andExpect(jsonPath("$.data.warningMinutes").value(15));
+                .andExpect(jsonPath("$.data.warningMinutes").value(15))
+                .andReturn().getResponse().getContentAsString();
+
+        // 응답의 수정 시각은 이번 수정 시각이어야 한다 — flush 전에 DTO 를 만들면 이전 값이 실린다(S4 QA)
+        OffsetDateTime responded = OffsetDateTime.parse(
+                JsonPath.read(body, "$.data.updatedAt"));
+        assertThat(responded).isAfter(before);
 
         SlaPolicy saved = slaPolicyRepository.findById(TicketPriority.URGENT).orElseThrow();
         assertThat(saved.getResponseMinutes()).isEqualTo(30);

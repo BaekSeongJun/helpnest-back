@@ -11,6 +11,7 @@ spring:
       chat: ${LLM_PROVIDER:mock}
     google:
       genai:
+        api-key: ${LLM_API_KEY:}   # 운영은 환경변수. 로컬은 application-local-secret.yml 이 덮어씀
         chat:
           options:
             model: ${llm.model}

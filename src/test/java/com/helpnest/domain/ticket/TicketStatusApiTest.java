@@ -2,6 +2,7 @@
 package com.helpnest.domain.ticket;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -386,6 +387,34 @@ class TicketStatusApiTest {
                         assertThat(h.actorName()).isNull();
                         assertThat(h.actorType()).isEqualTo(ActorType.SYSTEM);
                     });
+        }
+
+        @Test
+        @DisplayName("배정 이력은 전·후 상담원 이름을 붙이고, 숫자가 아니거나 없는 id 는 이름 없이 둔다")
+        void assignHistoryHasAgentNames() {
+            Ticket ticket = givenTicket(TicketStatus.ASSIGNED, assigneeId);
+            ticketHistoryRepository.save(TicketHistory.builder()
+                    .ticketId(ticket.getId())
+                    .action(HistoryAction.REASSIGN)
+                    .fromValue(String.valueOf(assigneeId))
+                    .toValue("9999999")
+                    .actorType(ActorType.SYSTEM)
+                    .build());
+            ticketHistoryRepository.save(TicketHistory.builder()
+                    .ticketId(ticket.getId())
+                    .action(HistoryAction.ASSIGN)
+                    .toValue("abc")
+                    .actorType(ActorType.SYSTEM)
+                    .build());
+
+            List<TicketHistoryResponse> histories = ticketService.findHistories(ticket.getId());
+
+            // 화면이 '#3' 대신 이름을 보여 준다 (S4 QA). fromValue 는 하위 호환으로 id 그대로
+            assertThat(histories).extracting(TicketHistoryResponse::fromValue, TicketHistoryResponse::fromName,
+                    TicketHistoryResponse::toName)
+                    .containsExactlyInAnyOrder(
+                            tuple(String.valueOf(assigneeId), "이상담", null),
+                            tuple(null, null, null));
         }
 
         @Test
