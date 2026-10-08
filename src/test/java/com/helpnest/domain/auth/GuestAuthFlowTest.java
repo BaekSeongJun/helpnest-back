@@ -100,6 +100,16 @@ class GuestAuthFlowTest {
     }
 
     @Test
+    @DisplayName("같은 티켓 실패 10회 → 맞는 비밀번호도 429 (back #105)")
+    void failLimitPerTicket() throws Exception {
+        for (int i = 0; i < 10; i++) {
+            failBody(guestTicketNo, EMAIL, "wrong-pass" + i);
+        }
+        mockMvc.perform(guest(guestTicketNo, EMAIL, PASSWORD))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
     @DisplayName("빈 값은 400")
     void validation() throws Exception {
         mockMvc.perform(guest("", EMAIL, PASSWORD)).andExpect(status().isBadRequest());

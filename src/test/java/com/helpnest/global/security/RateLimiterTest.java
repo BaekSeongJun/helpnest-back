@@ -39,6 +39,20 @@ class RateLimiterTest {
     }
 
     @Test
+    @DisplayName("isExhausted 는 세지 않고 한도 도달만 본다. 창이 지나면 풀린다")
+    void isExhausted() {
+        MovableClock clock = new MovableClock();
+        RateLimiter limiter = new RateLimiter(clock);
+        for (int i = 0; i < 3; i++) {
+            assertThat(limiter.isExhausted("k", 3)).isFalse();
+            limiter.tryAcquire("k", 3, WINDOW);
+        }
+        assertThat(limiter.isExhausted("k", 3)).isTrue();
+        clock.now = clock.now.plus(WINDOW);
+        assertThat(limiter.isExhausted("k", 3)).isFalse();
+    }
+
+    @Test
     @DisplayName("한도까지 허용, 한도+1번째부터 거부")
     void limit() {
         RateLimiter limiter = new RateLimiter(new MovableClock());

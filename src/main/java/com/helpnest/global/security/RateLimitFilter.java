@@ -19,8 +19,9 @@ import tools.jackson.databind.json.JsonMapper;
  * 스팸·대입 공격 방지용 IP 기준 요청 제한 (docs/04 §7, PRD FR-INQ-06). 초과 시 429 COMMON_TOO_MANY_REQUESTS.
  * <p>인증보다 먼저 실행된다(SecurityConfig). 대상·한도는 아래 RULES 표 하나에서만 관리한다.
  * <p>클라이언트 IP 는 {@code getRemoteAddr()} — {@code server.forward-headers-strategy: framework} 가
- * X-Forwarded-For 를 반영한 값이다. 배포 시 백엔드가 CloudFront/프록시를 통해서만 접근 가능해야
- * 클라이언트가 보낸 가짜 X-Forwarded-For 로 제한을 우회할 수 없다 (신수진 배포 설정).
+ * X-Forwarded-For 의 가장 왼쪽 값을 반영한 값이다. CloudFront 는 클라이언트가 보낸 XFF 를 지우지 않고 덧붙이므로
+ * 위조 XFF 로 이 IP 제한은 우회된다(back #105, 실측 후 신뢰할 위치로 교체 예정).
+ * 그래서 로그인·비회원 인증은 AuthService 가 계정·티켓번호 기준 실패 제한을 따로 건다.
  */
 public class RateLimitFilter extends OncePerRequestFilter {
 

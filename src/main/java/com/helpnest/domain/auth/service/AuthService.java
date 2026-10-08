@@ -17,8 +17,10 @@ import com.helpnest.domain.member.error.MemberErrorCode;
 import com.helpnest.domain.member.repository.MemberRepository;
 import com.helpnest.domain.ticket.port.TicketGuestPort;
 import com.helpnest.global.error.BusinessException;
+import com.helpnest.global.error.CommonErrorCode;
 import com.helpnest.global.security.JwtProperties;
 import com.helpnest.global.security.JwtProvider;
+import com.helpnest.global.security.RateLimiter;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -27,6 +29,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Locale;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -48,6 +51,12 @@ public class AuthService {
     /** 대상이 없을 때도 BCrypt 를 한 번 태워 응답 시간으로 존재 여부가 드러나지 않게 하는 용도 */
     private static final String DUMMY_HASH = new BCryptPasswordEncoder().encode("helpnest-dummy");
     static final Duration ROTATION_GRACE = Duration.ofSeconds(30);
+    /**
+     * 대상(계정·티켓번호) 기준 실패 제한. RateLimitFilter 의 IP 제한은 위조 X-Forwarded-For 로 우회되므로(back #105)
+     * IP 를 바꿔 가며 한 대상에 대입하는 것을 여기서 막는다. 성공은 세지 않는다.
+     */
+    static final int FAIL_LIMIT = 10;
+    static final Duration FAIL_WINDOW = Duration.ofMinutes(10);
 
     private final MemberRepository memberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -55,6 +64,7 @@ public class AuthService {
     private final JwtProvider jwtProvider;
     private final JwtProperties jwtProperties;
     private final TicketGuestPort ticketGuestPort;
+    private final RateLimiter rateLimiter;
 
     /** 컨트롤러가 body 와 Set-Cookie 를 나눠 쓰도록 함께 반환 */
     public record Tokens(AuthResponse body, String refreshToken) {
@@ -77,11 +87,14 @@ public class AuthService {
 
     @Transactional
     public Tokens login(LoginRequest req) {
+        // 없는 이메일도 똑같이 센다 — 가입 여부가 429 로 드러나지 않게
+        String failKey = "login-fail:" + req.email().trim().toLowerCase(Locale.ROOT);
+        checkFailLimit(failKey);
         // 없는 이메일도 더미 해시와 비교한다 — 건너뛰면 응답이 빨라져 가입 여부가 드러난다
         Optional<Member> found = memberRepository.findByEmail(req.email());
         boolean matches = passwordEncoder.matches(req.password(), found.map(Member::getPassword).orElse(DUMMY_HASH));
         Member member = found.filter(m -> matches)
-                .orElseThrow(() -> new BusinessException(AuthErrorCode.INVALID_CREDENTIALS));
+                .orElseThrow(() -> failure(failKey, AuthErrorCode.INVALID_CREDENTIALS));
         if (member.getStatus() == MemberStatus.INACTIVE) {
             throw new BusinessException(AuthErrorCode.INACTIVE_MEMBER);
         }
@@ -121,17 +134,31 @@ public class AuthService {
     /**
      * 비회원 조회 → Guest 토큰 (FR-AUTH-08). 티켓 없음·이메일 불일치·회원 티켓·비밀번호 오류를 모두 같은 401 로.
      * 해시가 없어도 더미 해시와 비교해 BCrypt 비용을 똑같이 쓴다 — 응답 시간으로 조합 존재가 드러나지 않게.
-     * 대입 방지 요청 제한(IP 10분 10건)은 RateLimitFilter 가 먼저 건다.
+     * 대입 방지: IP 10분 10건(RateLimitFilter) + 티켓번호 기준 실패 10분 10건.
      */
     public GuestTokenResponse guestLogin(GuestLoginRequest req) {
+        String failKey = "guest-fail:" + req.ticketNo().trim().toUpperCase(Locale.ROOT);
+        checkFailLimit(failKey);
         Long ticketId = ticketGuestPort.verifyGuest(req.ticketNo().trim(), req.email().trim());
         String hash = ticketId == null ? null : ticketGuestPort.findGuestPasswordHash(ticketId);
         boolean matches = passwordEncoder.matches(req.password(), hash != null ? hash : DUMMY_HASH);
         if (hash == null || !matches) {
-            throw new BusinessException(AuthErrorCode.GUEST_INVALID);
+            throw failure(failKey, AuthErrorCode.GUEST_INVALID);
         }
         return new GuestTokenResponse(jwtProvider.createGuestToken(ticketId), ticketId,
                 JwtProvider.GUEST_TTL.toSeconds());
+    }
+
+    /** 한도에 닿았으면 비밀번호를 비교하기 전에 429 — 맞는 비밀번호도 창이 끝날 때까지 막는다 */
+    private void checkFailLimit(String failKey) {
+        if (rateLimiter.isExhausted(failKey, FAIL_LIMIT)) {
+            throw new BusinessException(CommonErrorCode.TOO_MANY_REQUESTS);
+        }
+    }
+
+    private BusinessException failure(String failKey, AuthErrorCode code) {
+        rateLimiter.tryAcquire(failKey, FAIL_LIMIT, FAIL_WINDOW);
+        return new BusinessException(code);
     }
 
     /** 쿠키가 없거나 이미 무효여도 로그아웃은 성공으로 처리 */
