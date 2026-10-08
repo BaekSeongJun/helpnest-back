@@ -58,7 +58,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JsonMapper jsonMapper, RateLimiter rateLimiter,
-            @Value("${app.rate-limit.enabled:true}") boolean rateLimitEnabled) throws Exception {
+            @Value("${app.rate-limit.enabled:true}") boolean rateLimitEnabled,
+            @Value("${app.proxy-secret}") String proxySecret) throws Exception {
         // 토큰 없음·만료·위조 → 401, 역할 부족 → 403 (ApiResponse 형식)
         AuthenticationEntryPoint unauthorized = (req, res, e) -> writeError(res, jsonMapper, CommonErrorCode.UNAUTHORIZED);
         AccessDeniedHandler forbidden = (req, res, e) -> writeError(res, jsonMapper, CommonErrorCode.FORBIDDEN);
@@ -91,7 +92,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(forbidden));
         // 요청 제한은 인증보다 먼저 (대입 공격이 토큰 검증 비용까지 쓰지 않게). 테스트는 config/application.yml 에서 끈다
         if (rateLimitEnabled) {
-            http.addFilterBefore(new RateLimitFilter(rateLimiter, jsonMapper), BearerTokenAuthenticationFilter.class);
+            http.addFilterBefore(new RateLimitFilter(rateLimiter, jsonMapper, proxySecret), BearerTokenAuthenticationFilter.class);
         }
         return http.build();
     }
