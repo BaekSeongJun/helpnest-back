@@ -25,11 +25,12 @@ class RateLimitFilterTest {
     @Autowired
     MockMvc mockMvc;
 
-    private static MockHttpServletRequestBuilder login(String ip) {
+    /** 계정마다 실패 제한(AuthService)도 있어 IP 제한만 보려면 요청마다 이메일을 바꾼다 */
+    private static MockHttpServletRequestBuilder login(String ip, String email) {
         return post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                        {"email":"nobody@helpnest.local","password":"wrong-password"}
-                        """)
+                        {"email":"%s","password":"wrong-password"}
+                        """.formatted(email))
                 .with(r -> {
                     r.setRemoteAddr(ip);
                     return r;
@@ -40,15 +41,15 @@ class RateLimitFilterTest {
     @DisplayName("로그인 IP 10분 10건 초과 → 429 + Retry-After, 다른 IP 는 영향 없음")
     void loginLimited() throws Exception {
         for (int i = 0; i < 10; i++) {
-            mockMvc.perform(login("10.0.0.1")).andExpect(status().isUnauthorized());
+            mockMvc.perform(login("10.0.0.1", "nobody" + i + "@helpnest.local")).andExpect(status().isUnauthorized());
         }
-        mockMvc.perform(login("10.0.0.1"))
+        mockMvc.perform(login("10.0.0.1", "nobody-last@helpnest.local"))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().exists(HttpHeaders.RETRY_AFTER))
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("COMMON_TOO_MANY_REQUESTS"));
 
-        mockMvc.perform(login("10.0.0.2")).andExpect(status().isUnauthorized());
+        mockMvc.perform(login("10.0.0.2", "nobody-other@helpnest.local")).andExpect(status().isUnauthorized());
     }
 
     @Test
