@@ -58,6 +58,15 @@ public class RateLimiter {
         return updated.count() <= limit;
     }
 
+    /**
+     * 세지 않고 한도에 닿았는지만 본다. 실패만 세는 제한(로그인·비회원 인증)에서 검사 전에 쓰고,
+     * 실패했을 때 {@link #tryAcquire} 로 센다.
+     */
+    public boolean isExhausted(String key, int limit) {
+        Window w = windows.get(key);
+        return w != null && w.resetAtMillis() > clock.millis() && w.count() >= limit;
+    }
+
     /** 다음 창까지 남은 초 (Retry-After 헤더용). 기록이 없으면 0 */
     public long retryAfterSeconds(String key) {
         Window w = windows.get(key);

@@ -149,6 +149,32 @@ class AuthFlowTest {
     }
 
     @Test
+    @DisplayName("같은 계정 실패 10회 → 맞는 비밀번호도 429 (IP 를 바꿔도 막힘, back #105). 대소문자만 바꿔도 같은 계정")
+    void failLimitPerAccount() throws Exception {
+        String email = "fail-limit@helpnest.local";
+        mockMvc.perform(post("/api/auth/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","password":"%s","name":"테스트","phone":"010-0000-0000"}
+                                """.formatted(email, PASSWORD)))
+                .andExpect(status().isCreated());
+        for (int i = 0; i < 10; i++) {
+            String addr = "10.0.0." + i;
+            mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                            .with(r -> { r.setRemoteAddr(addr); return r; })
+                            .content("""
+                                    {"email":"%s","password":"wrong-password"}
+                                    """.formatted(i % 2 == 0 ? email : email.toUpperCase())))
+                    .andExpect(status().isUnauthorized());
+        }
+        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","password":"%s"}
+                                """.formatted(email, PASSWORD)))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.error.code").value("COMMON_TOO_MANY_REQUESTS"));
+    }
+
+    @Test
     @DisplayName("비밀번호가 틀리면 401 AUTH_INVALID_CREDENTIALS")
     void wrongPassword() throws Exception {
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
