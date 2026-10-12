@@ -14,6 +14,7 @@ import com.helpnest.domain.member.entity.Member;
 import com.helpnest.domain.member.entity.MemberRole;
 import com.helpnest.domain.member.entity.MemberStatus;
 import com.helpnest.domain.member.error.MemberErrorCode;
+import com.helpnest.domain.member.event.MemberSignedUpEvent;
 import com.helpnest.domain.member.repository.MemberRepository;
 import com.helpnest.domain.ticket.port.TicketGuestPort;
 import com.helpnest.global.error.BusinessException;
@@ -31,7 +32,8 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Optional;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -43,7 +45,6 @@ import org.springframework.util.StringUtils;
  * Refresh 원문은 쿠키로만 나가고 DB 에는 SHA-256 해시만 저장한다.
  */
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class AuthService {
 
@@ -65,24 +66,54 @@ public class AuthService {
     private final JwtProperties jwtProperties;
     private final TicketGuestPort ticketGuestPort;
     private final RateLimiter rateLimiter;
+    private final ApplicationEventPublisher events;
+    private final boolean emailVerification;
+
+    public AuthService(MemberRepository memberRepository, RefreshTokenRepository refreshTokenRepository,
+            PasswordEncoder passwordEncoder, JwtProvider jwtProvider, JwtProperties jwtProperties,
+            TicketGuestPort ticketGuestPort, RateLimiter rateLimiter, ApplicationEventPublisher events,
+            @Value("${app.auth.email-verification}") boolean emailVerification) {
+        this.memberRepository = memberRepository;
+        this.refreshTokenRepository = refreshTokenRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtProvider = jwtProvider;
+        this.jwtProperties = jwtProperties;
+        this.ticketGuestPort = ticketGuestPort;
+        this.rateLimiter = rateLimiter;
+        this.events = events;
+        this.emailVerification = emailVerification;
+    }
 
     /** 컨트롤러가 body 와 Set-Cookie 를 나눠 쓰도록 함께 반환 */
     public record Tokens(AuthResponse body, String refreshToken) {
     }
 
+    /**
+     * 이메일 인증이 켜져 있으면 PENDING 으로 저장하고 {@link MemberSignedUpEvent} 를 발행한다 — 인증 메일은 구독자(신수진)가 보낸다.
+     * 인증 전인 같은 이메일의 재가입은 덮어쓴다: 남이 내 이메일로 먼저 가입해 두어도 링크는 내 메일함으로만 가므로
+     * 그 사람은 인증할 수 없고, 나는 다시 가입해 내 비밀번호로 바꿀 수 있다.
+     */
     @Transactional
     public MemberResponse signup(SignupRequest req) {
-        if (memberRepository.existsByEmail(req.email())) {
+        String passwordHash = passwordEncoder.encode(req.password());
+        String phone = StringUtils.hasText(req.phone()) ? req.phone() : null;
+        Optional<Member> existing = memberRepository.findByEmail(req.email());
+        if (existing.filter(m -> m.getStatus() != MemberStatus.PENDING).isPresent()) {
             throw new BusinessException(MemberErrorCode.EMAIL_DUPLICATED);
         }
-        Member member = Member.builder()
+        existing.ifPresent(m -> m.reRegister(passwordHash, req.name(), phone));
+        Member member = existing.orElseGet(() -> memberRepository.save(Member.builder()
                 .email(req.email())
-                .password(passwordEncoder.encode(req.password()))
+                .password(passwordHash)
                 .name(req.name())
-                .phone(StringUtils.hasText(req.phone()) ? req.phone() : null)
+                .phone(phone)
                 .role(MemberRole.CUSTOMER)
-                .build();
-        return MemberResponse.from(memberRepository.save(member));
+                .status(emailVerification ? MemberStatus.PENDING : MemberStatus.ACTIVE)
+                .build()));
+        if (member.getStatus() == MemberStatus.PENDING) {
+            events.publishEvent(new MemberSignedUpEvent(member.getId(), member.getEmail(), member.getName()));
+        }
+        return MemberResponse.from(member);
     }
 
     @Transactional
@@ -97,6 +128,9 @@ public class AuthService {
                 .orElseThrow(() -> failure(failKey, AuthErrorCode.INVALID_CREDENTIALS));
         if (member.getStatus() == MemberStatus.INACTIVE) {
             throw new BusinessException(AuthErrorCode.INACTIVE_MEMBER);
+        }
+        if (member.getStatus() == MemberStatus.PENDING) {
+            throw new BusinessException(AuthErrorCode.EMAIL_NOT_VERIFIED);
         }
         return issue(member);
     }
