@@ -47,14 +47,14 @@ class TicketStateMachineTest {
     }
 
     /**
-     * PRD 5장 전이표의 허용 칸 7건. 수행자는 전이표 수행자 열 원문을 따른다.
-     * 재배정 2건에 AGENT 가 포함된 근거와 PRD 2.1 과의 충돌은 TicketStateMachine 주석 참고.
+     * PRD 5장 전이표의 허용 칸 7건. 재배정 2건만 PRD 2.1 기준 LEAD/ADMIN 전용이다(#116,
+     * TicketStateMachine 주석 참고).
      */
     private static final List<Transition> ALLOWED = List.of(
             new Transition(RECEIVED, ASSIGNED, Set.of(SYSTEM, LEAD, ADMIN)),
-            new Transition(ASSIGNED, ASSIGNED, Set.of(AGENT, LEAD, ADMIN)),
+            new Transition(ASSIGNED, ASSIGNED, Set.of(LEAD, ADMIN)),
             new Transition(ASSIGNED, IN_PROGRESS, Set.of(AGENT, LEAD, ADMIN)),
-            new Transition(IN_PROGRESS, ASSIGNED, Set.of(AGENT, LEAD, ADMIN)),
+            new Transition(IN_PROGRESS, ASSIGNED, Set.of(LEAD, ADMIN)),
             new Transition(IN_PROGRESS, RESOLVED, Set.of(AGENT, LEAD, ADMIN)),
             new Transition(RESOLVED, IN_PROGRESS, Set.of(SYSTEM, CUSTOMER)),
             new Transition(RESOLVED, CLOSED, Set.of(SYSTEM, CUSTOMER)));
@@ -219,7 +219,7 @@ class TicketStateMachineTest {
                 .flatMap(t -> t.actors().stream().map(actor -> Arguments.of(t.from(), t.to(), actor)));
     }
 
-    /** 허용 전이마다 수행자 집합의 여집합. 5개 역할 중 3개가 허용이므로 전이당 2건씩 나온다. */
+    /** 허용 전이마다 수행자 집합의 여집합. 재배정 2건은 3건씩(AGENT 포함), 나머지는 2건씩 나온다. */
     private static Stream<Arguments> deniedRoleCases() {
         return ALLOWED.stream().flatMap(t -> EnumSet.complementOf(EnumSet.copyOf(t.actors())).stream()
                 .map(actor -> Arguments.of(t.from(), t.to(), actor)));
