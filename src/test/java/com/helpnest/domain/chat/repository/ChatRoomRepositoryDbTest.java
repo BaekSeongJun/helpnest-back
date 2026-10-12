@@ -62,7 +62,8 @@ class ChatRoomRepositoryDbTest {
     void 대기열_FIFO() {
         ChatRoom later = roomRepository.save(ChatRoom.waiting(customer1, NOW.plusSeconds(30)));
         ChatRoom first = roomRepository.save(ChatRoom.waiting(customer2, NOW));
-        ChatRoom opened = ChatRoom.waiting(customer1, NOW.minusMinutes(1));
+        // 고객당 진행 중 방은 하나라(uq_chat_room_active_customer) OPEN 방은 다른 고객으로 만든다
+        ChatRoom opened = ChatRoom.waiting(memberId("customer3@helpnest.local"), NOW.minusMinutes(1));
         opened.open(agent1, null, NOW);
         roomRepository.save(opened);
 
