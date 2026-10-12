@@ -12,6 +12,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -42,6 +44,17 @@ public class MemberController {
     public ApiResponse<Void> changePassword(@AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody PasswordChangeRequest req) {
         memberService.changePassword(JwtProvider.memberId(jwt), req);
+        return ApiResponse.ok();
+    }
+
+    /**
+     * 회원 탈퇴 (CU-10, 고객 전용). 계정을 비활성화하고 Refresh 를 전부 폐기한다 → 프론트는 로그아웃 처리.
+     * 직원 계정은 ADMIN 이 계정 관리에서 비활성화한다
+     */
+    @DeleteMapping("/me")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ApiResponse<Void> withdraw(@AuthenticationPrincipal Jwt jwt) {
+        memberService.withdraw(JwtProvider.memberId(jwt));
         return ApiResponse.ok();
     }
 
