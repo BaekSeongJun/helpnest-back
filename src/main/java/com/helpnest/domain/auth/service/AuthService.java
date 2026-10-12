@@ -121,9 +121,11 @@ public class AuthService {
         // 없는 이메일도 똑같이 센다 — 가입 여부가 429 로 드러나지 않게
         String failKey = "login-fail:" + req.email().trim().toLowerCase(Locale.ROOT);
         checkFailLimit(failKey);
-        // 없는 이메일도 더미 해시와 비교한다 — 건너뛰면 응답이 빨라져 가입 여부가 드러난다
+        // 없는 이메일·비밀번호 없는 소셜 회원도 더미 해시와 비교한다 — 건너뛰면 응답이 빨라져 가입 여부가 드러난다.
+        // 단 더미 해시와 맞았다고 통과시키면 안 된다: 더미의 원문은 공개 코드에 있다
         Optional<Member> found = memberRepository.findByEmail(req.email());
-        boolean matches = passwordEncoder.matches(req.password(), found.map(Member::getPassword).orElse(DUMMY_HASH));
+        Optional<String> hash = found.map(Member::getPassword);
+        boolean matches = passwordEncoder.matches(req.password(), hash.orElse(DUMMY_HASH)) && hash.isPresent();
         Member member = found.filter(m -> matches)
                 .orElseThrow(() -> failure(failKey, AuthErrorCode.INVALID_CREDENTIALS));
         if (member.getStatus() == MemberStatus.INACTIVE) {
@@ -210,6 +212,12 @@ public class AuthService {
         }
         return refreshTokenRepository.findByTokenHash(sha256(rawToken))
                 .orElseThrow(() -> new BusinessException(AuthErrorCode.REFRESH_INVALID));
+    }
+
+    /** 비밀번호 확인 없이 발급 — 소셜 로그인처럼 호출자가 본인 확인을 끝낸 경우에만 쓴다 */
+    @Transactional
+    public Tokens issueTokens(Member member) {
+        return issue(member);
     }
 
     private Tokens issue(Member member) {
