@@ -24,13 +24,15 @@ public final class MailTemplates {
     private MailTemplates() {
     }
 
+    /** summary 가 비면(공개 답변 없이 해결) 답변 요약 칸을 뺀다 */
     public static MailContent resolved(ResolvedMailCommand cmd, String summary) {
+        String summaryBlock = summary == null || summary.isBlank() ? ""
+                : "<p><strong>답변 요약</strong><br>%s</p>".formatted(esc(summary));
         String body = """
                 <p>%s님, 문의하신 내용이 해결되었습니다.</p>
                 <p><strong>문의 제목</strong><br>%s</p>
-                <p><strong>답변 요약</strong><br>%s</p>
-                <p>서비스 개선을 위해 간단한 설문에 참여해 주세요.<br>설문 만료: %s</p>
-                """.formatted(esc(cmd.customerName()), esc(cmd.ticketTitle()), esc(summary),
+                %s<p>서비스 개선을 위해 간단한 설문에 참여해 주세요.<br>설문 만료: %s</p>
+                """.formatted(esc(cmd.customerName()), esc(cmd.ticketTitle()), summaryBlock,
                 formatTime(cmd.surveyExpiresAt()));
         return new MailContent("[HelpNest] 문의(%s)가 해결되었습니다".formatted(cmd.ticketNo()),
                 layout(body, "설문 참여하기", cmd.surveyUrl()));

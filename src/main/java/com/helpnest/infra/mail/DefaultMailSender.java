@@ -97,8 +97,11 @@ public class DefaultMailSender implements MailSender {
         mailLogRepository.save(mail);
     }
 
-    /** LLM 1문장 요약, 실패·빈값이면 앞 200자 (docs/05 §5) */
+    /** LLM 1문장 요약, 실패·빈값이면 앞 200자 (docs/05 §5). 공개 답변 없이 해결된 티켓(null)은 "" */
     String summarize(String finalReply) {
+        if (finalReply == null || finalReply.isBlank()) {
+            return ""; // 빈 입력은 Spring AI 가 거부한다 — 호출하지 않는다
+        }
         try {
             ReplySummary r = llmClient.structured(SUMMARY_PROMPT, finalReply, ReplySummary.class);
             if (r != null && r.summary() != null && !r.summary().isBlank()) {
