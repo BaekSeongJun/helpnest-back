@@ -8,6 +8,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -17,8 +24,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.helpnest.domain.chat.entity.ChatMessage;
@@ -27,6 +36,7 @@ import com.helpnest.domain.chat.entity.ChatRoomStatus;
 import com.helpnest.domain.chat.repository.ChatMessageRepository;
 import com.helpnest.domain.chat.repository.ChatRoomRepository;
 import com.helpnest.domain.chat.scheduler.ChatQueueScheduler;
+import com.helpnest.domain.chat.service.ChatService;
 import com.helpnest.domain.member.entity.Member;
 import com.helpnest.domain.member.entity.MemberRole;
 import com.helpnest.domain.member.repository.MemberRepository;
@@ -65,6 +75,10 @@ class ChatRoomApiTest {
     NotificationRepository notificationRepository;
     @Autowired
     ChatQueueScheduler scheduler;
+    @Autowired
+    ChatService chatService;
+    @Autowired
+    JdbcTemplate jdbcTemplate;
 
     private Long customer1;
     private Long customer2;
@@ -140,6 +154,38 @@ class ChatRoomApiTest {
             requestChat(customer1Token).andExpect(jsonPath("$.data.position").value(1));
 
             assertThat(roomRepository.findTop50ByCustomerIdOrderByIdDesc(customer1)).hasSize(1);
+        }
+
+        /**
+         * 실제 커밋이 필요해 테스트 트랜잭션을 끈다. 만든 방은 끝나자마자 지운다 — 대기열 스케줄러(10초)가
+         * 그 사이 연결하면 티켓이 남으므로 서비스만 직접 부르고 매칭은 하지 않는다.
+         */
+        @Test
+        @Transactional(propagation = Propagation.NOT_SUPPORTED)
+        @DisplayName("같은 고객의 동시 요청 두 건도 방은 하나다")
+        void 동시_요청() throws Exception {
+            assertThat(roomRepository.findFirstByCustomerIdAndStatusIn(customer2,
+                    List.of(ChatRoomStatus.WAITING, ChatRoomStatus.OPEN))).as("진행 중 방이 남아 있으면 검증 불가").isEmpty();
+
+            // 한쪽 스레드가 실패해도 다른 쪽이 만든 방까지 지우도록 id 가 아니라 "이후 생긴 방"으로 정리한다
+            long maxBefore = jdbcTemplate.queryForObject("select coalesce(max(room_id), 0) from chat_room", Long.class);
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            CountDownLatch start = new CountDownLatch(1);
+            Callable<Long> request = () -> {
+                start.await();
+                return chatService.openOrGetRoom(customer2);
+            };
+            try {
+                Future<Long> first = pool.submit(request);
+                Future<Long> second = pool.submit(request);
+                start.countDown();
+
+                assertThat(first.get(10, TimeUnit.SECONDS)).isEqualTo(second.get(10, TimeUnit.SECONDS));
+            } finally {
+                pool.shutdownNow();
+                pool.awaitTermination(10, TimeUnit.SECONDS);
+                jdbcTemplate.update("delete from chat_room where customer_id = ? and room_id > ?", customer2, maxBefore);
+            }
         }
 
         @Test
