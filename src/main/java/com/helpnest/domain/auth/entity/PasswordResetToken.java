@@ -22,9 +22,9 @@ import org.hibernate.annotations.CreationTimestamp;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class PasswordResetToken {
 
-    /** MEMBER → member_id, GUEST_TICKET → ticket_id */
+    /** MEMBER·EMAIL_VERIFY → member_id, GUEST_TICKET → ticket_id */
     public enum TargetType {
-        MEMBER, GUEST_TICKET
+        MEMBER, GUEST_TICKET, EMAIL_VERIFY
     }
 
     @Id
