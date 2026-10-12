@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Spring AI ChatClient 기반 구현 (LLM_PROVIDER=google-genai 등, mock 이 아닐 때).
- * 타임아웃 10초, 재시도 1회, 입력 4,000자, 전송 전 마스킹 (docs/05 §2).
+ * 타임아웃 10초, 재시도 1회(AI 상담은 {@link #structuredOnce} 로 재시도 없음), 입력 4,000자, 전송 전 마스킹 (docs/05 §2).
  */
 @Slf4j
 @Component
@@ -40,10 +40,19 @@ public class SpringAiLlmClient implements LlmClient {
 
     @Override
     public <T> T structured(String system, String user, Class<T> type) {
+        return call(system, user, type, MAX_ATTEMPTS);
+    }
+
+    @Override
+    public <T> T structuredOnce(String system, String user, Class<T> type) {
+        return call(system, user, type, 1);
+    }
+
+    private <T> T call(String system, String user, Class<T> type, int maxAttempts) {
         // user 에 템플릿 변수를 넘기지 않으므로 본문의 { } 는 렌더링되지 않는다
         String safeUser = PiiMasker.mask(truncate(user));
         Exception last = null;
-        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             Future<T> future = executor.submit(
                     () -> chatClient.prompt().system(system).user(safeUser).call().entity(type));
             try {
@@ -51,7 +60,7 @@ public class SpringAiLlmClient implements LlmClient {
             } catch (TimeoutException | ExecutionException e) {
                 future.cancel(true);
                 last = e;
-                log.warn("LLM 호출 실패 attempt={}/{} type={} cause={}", attempt, MAX_ATTEMPTS,
+                log.warn("LLM 호출 실패 attempt={}/{} type={} cause={}", attempt, maxAttempts,
                         type.getSimpleName(), e.toString());
             } catch (InterruptedException e) {
                 future.cancel(true);
@@ -59,7 +68,7 @@ public class SpringAiLlmClient implements LlmClient {
                 throw new LlmException("LLM 호출 중단", e);
             }
         }
-        throw new LlmException("LLM 호출 실패(재시도 소진)", last);
+        throw new LlmException(maxAttempts > 1 ? "LLM 호출 실패(재시도 소진)" : "LLM 호출 실패", last);
     }
 
     @Override

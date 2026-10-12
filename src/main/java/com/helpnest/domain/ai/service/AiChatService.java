@@ -67,7 +67,8 @@ public class AiChatService {
     /** @return 답변, 빈 응답·실패면 null */
     private String callLlm(String userPrompt, Long memberId) {
         try {
-            AiChatResult r = llmClient.structured(SYSTEM_PROMPT, userPrompt, AiChatResult.class);
+            // 재시도 없음: 고객이 기다리므로 실패 시 타임아웃 1회(10초) 뒤 바로 상담원 연결 안내
+            AiChatResult r = llmClient.structuredOnce(SYSTEM_PROMPT, userPrompt, AiChatResult.class);
             if (r != null && r.answer() != null && !r.answer().isBlank()) {
                 return r.answer().strip();
             }
