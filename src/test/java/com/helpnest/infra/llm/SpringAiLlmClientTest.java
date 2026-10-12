@@ -81,6 +81,17 @@ class SpringAiLlmClientTest {
     }
 
     @Test
+    @DisplayName("structuredOnce 는 재시도 없이 1회 실패로 LlmException")
+    void onceDoesNotRetry() {
+        ChatModel model = mockModel();
+        when(model.call(any(Prompt.class))).thenThrow(new RuntimeException("503"));
+
+        assertThatThrownBy(() -> client(model).structuredOnce("sys", "u", Answer.class))
+                .isInstanceOf(LlmException.class);
+        verify(model, times(1)).call(any(Prompt.class));
+    }
+
+    @Test
     @DisplayName("4,000자 초과 입력은 앞부분만, 모델명은 llm.model 우선")
     void truncateAndModelName() {
         assertThat(SpringAiLlmClient.truncate("가".repeat(5000))).hasSize(SpringAiLlmClient.MAX_INPUT);

@@ -40,7 +40,7 @@ class AiChatServiceTest {
     @DisplayName("근거 FAQ 있음 → LLM 답변 + 참고 FAQ")
     void answered() {
         when(faqQueryPort.findPublishedByQuestion("환불 언제 돼요?", 3)).thenReturn(List.of(FAQ));
-        when(llm.structured(anyString(), anyString(), eq(AiChatResult.class)))
+        when(llm.structuredOnce(anyString(), anyString(), eq(AiChatResult.class)))
                 .thenReturn(new AiChatResult(" 3~5영업일 안에 환불됩니다. "));
 
         AiChatResponse r = service.chat(MEMBER, "환불 언제 돼요?", null);
@@ -60,14 +60,14 @@ class AiChatServiceTest {
         assertThat(r.handoff()).isTrue();
         assertThat(r.answer()).isEqualTo(AiChatService.HANDOFF_ANSWER);
         assertThat(r.references()).isEmpty();
-        verify(llm, never()).structured(anyString(), anyString(), any());
+        verify(llm, never()).structuredOnce(anyString(), anyString(), any());
     }
 
     @Test
     @DisplayName("LLM 실패·FAQ 밖이라 빈 답변 → handoff (오류 아님)")
     void llmFailedOrEmpty() {
         when(faqQueryPort.findPublishedByQuestion(anyString(), eq(3))).thenReturn(List.of(FAQ));
-        when(llm.structured(anyString(), anyString(), eq(AiChatResult.class)))
+        when(llm.structuredOnce(anyString(), anyString(), eq(AiChatResult.class)))
                 .thenThrow(new LlmException("timeout", null))
                 .thenReturn(new AiChatResult(""));
 
