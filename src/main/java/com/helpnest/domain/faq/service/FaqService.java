@@ -42,6 +42,11 @@ public class FaqService {
      * 조사가 붙은 단어("환불은")는 일치하지 않는다 — 형태소 분석이 필요해지면 그때 검색 엔진으로.
      */
     public List<FaqResponse> suggest(String q) {
+        return rank(q, SUGGEST_LIMIT).stream().map(FaqResponse::from).toList();
+    }
+
+    /** 추천 채점 본체 — 접수 폼 추천과 AI 상담 근거 조회(FaqQueryPort)가 같이 쓴다 */
+    public List<Faq> rank(String q, int limit) {
         List<String> words = q == null ? List.of() : Arrays.stream(q.toLowerCase().split("\\s+"))
                 .filter(w -> w.length() >= 2).distinct().toList();
         if (words.isEmpty()) {
@@ -57,8 +62,8 @@ public class FaqService {
                 .filter(s -> s.score() > 0)
                 .sorted(Comparator.comparingLong(Scored::score).reversed()
                         .thenComparing(s -> s.faq().getViewCount(), Comparator.reverseOrder()))
-                .limit(SUGGEST_LIMIT)
-                .map(s -> FaqResponse.from(s.faq()))
+                .limit(Math.max(limit, 0))
+                .map(Scored::faq)
                 .toList();
     }
 
