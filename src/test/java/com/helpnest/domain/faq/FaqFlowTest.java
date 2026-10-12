@@ -157,6 +157,9 @@ class FaqFlowTest {
         assertThat(faqQueryPort.findPublishedByQuestion(KW + " 배송", 1))
                 .extracting(FaqInfo::question).containsExactly(KW + " 배송 공개");
         assertThat(faqQueryPort.findPublishedByQuestion("없는말zz", 5)).isEmpty();
+        // 조사·문장부호가 붙어도 찾는다 (KW + "은?" → KW)
+        assertThat(faqQueryPort.findPublishedByQuestion(KW + "은? 없는말zz", 5))
+                .isNotEmpty().allSatisfy(f -> assertThat(f.question()).contains(KW));
     }
 
     private Faq faq(TicketCategory category, String question, boolean isPublished) {
