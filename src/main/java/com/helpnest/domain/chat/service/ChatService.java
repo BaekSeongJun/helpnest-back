@@ -69,14 +69,14 @@ public class ChatService {
      * 채팅 요청. 진행 중(WAITING·OPEN) 방이 있으면 새로 만들지 않고 그 방을 돌려준다 —
      * 새로고침·재요청마다 방이 생기면 한 고객이 대기열 여러 칸을 차지한다.
      *
-     * <p>ponytail: 같은 고객의 동시 요청 두 건은 방 2개를 만들 수 있다. 화면이 버튼을 막으므로
-     * 두지 않았고, 필요하면 chat_room(customer_id) WHERE status IN ('WAITING','OPEN') 부분 유니크 인덱스.
+     * <p>같은 고객의 동시 요청 두 건도 방 하나로 모인다 — 조회 후 저장이면 둘 다 "없음"을 보고 각자
+     * 저장하므로, 넣기를 DB 부분 유니크 인덱스에 맡기고 ON CONFLICT 로 충돌을 무시한 뒤 다시 읽는다(#116).
+     * 유니크 위반 예외를 잡는 방식은 PostgreSQL 이 그 트랜잭션을 중단 상태로 만들어 다시 읽을 수 없다.
      */
     @Transactional
     public Long openOrGetRoom(Long customerId) {
-        return roomRepository.findFirstByCustomerIdAndStatusIn(customerId, ACTIVE)
-                .orElseGet(() -> roomRepository.save(ChatRoom.waiting(customerId, OffsetDateTime.now())))
-                .getId();
+        roomRepository.insertWaitingIfAbsent(customerId, OffsetDateTime.now());
+        return roomRepository.findFirstByCustomerIdAndStatusIn(customerId, ACTIVE).orElseThrow().getId();
     }
 
     /**

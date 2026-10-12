@@ -30,8 +30,8 @@ public class Member extends BaseTimeEntity {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
-    /** BCrypt 해시 */
-    @Column(nullable = false, length = 100)
+    /** BCrypt 해시. 소셜로만 가입한 회원은 null — 비밀번호 로그인 불가, "비밀번호 찾기"로 만들 수 있다 */
+    @Column(length = 100)
     private String password;
 
     @Column(nullable = false, length = 50)
@@ -55,15 +55,33 @@ public class Member extends BaseTimeEntity {
     /** 최소 부하 동률 시 먼저 배정할 상담원 판단용 */
     private OffsetDateTime lastAssignedAt;
 
+    /** 인증 링크를 누른 시각. 인증 도입 전 가입자·직원 계정은 null */
+    private OffsetDateTime emailVerifiedAt;
+
     @Builder
-    private Member(String email, String password, String name, String phone, MemberRole role) {
+    private Member(String email, String password, String name, String phone, MemberRole role, MemberStatus status) {
         this.email = email;
         this.password = password;
         this.name = name;
         this.phone = phone;
         this.role = role;
-        this.status = MemberStatus.ACTIVE;
+        this.status = status != null ? status : MemberStatus.ACTIVE;
         this.available = false;
+    }
+
+    /** 인증 링크 확인. PENDING 만 ACTIVE 로 올린다 — 관리자가 비활성화한 계정을 되살리지 않는다 */
+    public void verifyEmail(OffsetDateTime at) {
+        this.emailVerifiedAt = at;
+        if (this.status == MemberStatus.PENDING) {
+            this.status = MemberStatus.ACTIVE;
+        }
+    }
+
+    /** 인증 전 같은 이메일로 다시 가입 — 나중 입력으로 덮어쓴다 (남의 이메일 선점 방지) */
+    public void reRegister(String passwordHash, String name, String phone) {
+        this.password = passwordHash;
+        this.name = name;
+        this.phone = phone;
     }
 
     public void touchLastAssigned(OffsetDateTime at) {
@@ -86,7 +104,7 @@ public class Member extends BaseTimeEntity {
         this.available = available;
     }
 
-    /** @param passwordHash BCrypt 해시. Refresh 폐기는 호출자가 함께 한다 */
+    /** @param passwordHash BCrypt 해시(null 이면 비밀번호 로그인을 막는다). Refresh 폐기는 호출자가 함께 한다 */
     public void changePassword(String passwordHash) {
         this.password = passwordHash;
     }

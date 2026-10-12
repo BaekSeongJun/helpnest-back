@@ -22,6 +22,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
@@ -77,6 +78,8 @@ class CustomerTicketApiTest {
     TicketQueryPort ticketQueryPort;
     @Autowired
     JwtProvider jwtProvider;
+    @Autowired
+    JdbcTemplate jdbcTemplate;
 
     private Long customerId;
     private Long otherCustomerId;
@@ -192,6 +195,20 @@ class CustomerTicketApiTest {
             mockMvc.perform(get("/api/tickets/my")
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + guestToken))
                     .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("status 를 주면 내 티켓 중 그 상태만 보인다")
+        void filtersByStatus() throws Exception {
+            Ticket resolved = givenTicket(customerId, TicketStatus.RESOLVED);
+            givenTicket(customerId, TicketStatus.RECEIVED);
+            givenTicket(otherCustomerId, TicketStatus.RESOLVED);
+
+            mockMvc.perform(get("/api/tickets/my").param("status", "RESOLVED")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + customerToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].ticketNo").value(resolved.getTicketNo()));
         }
 
         @Test
@@ -418,6 +435,34 @@ class CustomerTicketApiTest {
             assertThat(replies).extracting(ResolvedReply::content)
                     .contains(PUBLIC_REPLY)
                     .doesNotContain(INTERNAL_MEMO, "고객이 쓴 글");
+        }
+
+        @Test
+        @DisplayName("findResolvedReplies 는 만족도 4 이상 답변을 먼저, 나머지는 최신순으로 준다")
+        void prefersHighRatedReplies() {
+            // 생성 시각은 JVM 시계라 연속 저장 시 겹칠 수 있어 직접 지정한다
+            ratedReply("별점5 받은 오래된 답변", (short) 5, 3);
+            ratedReply("별점1 받은 답변", (short) 1, 2);
+            ratedReply("설문 없는 최신 답변", null, 1);
+
+            assertThat(ticketQueryPort.findResolvedReplies("DELIVERY", 100))
+                    .extracting(ResolvedReply::content)
+                    .filteredOn(c -> c.contains("답변") && !c.equals(PUBLIC_REPLY))
+                    .containsSubsequence("별점5 받은 오래된 답변", "설문 없는 최신 답변", "별점1 받은 답변");
+        }
+
+        /** RESOLVED 티켓 + 상담원 공개 답변 1건(daysAgo 일 전), rating 이 있으면 제출된 설문까지 */
+        private void ratedReply(String content, Short rating, int daysAgo) {
+            Ticket ticket = givenTicket(customerId, TicketStatus.RESOLVED);
+            TicketReply reply = saveReply(ticket, WriterType.AGENT, agentId, content, false);
+            ticketReplyRepository.flush();
+            jdbcTemplate.update("update ticket_reply set created_at = ? where reply_id = ?",
+                    OffsetDateTime.now().minusDays(daysAgo), reply.getId());
+            if (rating != null) {
+                jdbcTemplate.update("insert into survey (ticket_id, token, rating, expires_at, submitted_at) "
+                        + "values (?, ?, ?, now() + interval '72 hours', now())",
+                        ticket.getId(), "test-" + ticket.getId(), rating);
+            }
         }
 
         @Test

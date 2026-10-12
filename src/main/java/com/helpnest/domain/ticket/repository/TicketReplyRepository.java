@@ -43,24 +43,25 @@ public interface TicketReplyRepository extends JpaRepository<TicketReply, Long> 
      * 상담원이 쓴 답변. 내부 메모가 섞이면 고객에게 보내는 초안의 참고 자료로 들어가
      * 그대로 전달될 수 있다({@link ResolvedReply} 주석).
      *
-     * <p>TODO(PMJ): docs/05 §4.1 은 "만족도 4 이상 우선"도 요구하지만 survey 테이블이
-     * 아직 없다(백성준 S2). 테이블이 들어오면 survey 를 LEFT JOIN 해
-     * {@code order by survey.rating desc nulls last, r.createdAt desc} 로 바꾼다.
-     * 지금은 최신순이며, 이는 참고 자료의 품질 정렬이 빠진 상태라는 뜻이다.
+     * <p>정렬은 docs/05 §4.1 "만족도 4 이상 우선" — 별점 4·5 를 받은 티켓의 답변이 먼저, 그 안팎은
+     * 최신순이다. {@code rating desc} 로 하지 않은 것은 별점 1 받은 답변이 설문 없는 최신 답변보다
+     * 앞서면 나쁜 답변을 초안 참고로 우선 넣게 되기 때문이다. survey(백성준)는 ticket_id UNIQUE 라
+     * LEFT JOIN 해도 답변 행이 늘지 않는다. 조회 전용이며 survey 쪽 파일은 건드리지 않는다(#116).
      *
      * @param pageable 개수 제한용. {@code PageRequest.of(0, limit)} 를 넘긴다
      */
     @Query("""
             select new com.helpnest.domain.ticket.port.ResolvedReply(r.id, r.content)
-            from TicketReply r, Ticket t
-            where r.ticketId = t.id
-              and t.category = :category
+            from TicketReply r
+              join Ticket t on r.ticketId = t.id
+              left join Survey s on s.ticketId = t.id
+            where t.category = :category
               and t.status in (
                 com.helpnest.domain.ticket.entity.TicketStatus.RESOLVED,
                 com.helpnest.domain.ticket.entity.TicketStatus.CLOSED)
               and r.isInternal = false
               and r.writerType = com.helpnest.domain.ticket.entity.WriterType.AGENT
-            order by r.createdAt desc
+            order by case when s.rating >= 4 then 0 else 1 end, r.createdAt desc
             """)
     List<ResolvedReply> findResolvedReplies(@Param("category") TicketCategory category, Pageable pageable);
 

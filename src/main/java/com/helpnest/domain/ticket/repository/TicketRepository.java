@@ -106,6 +106,9 @@ public interface TicketRepository extends JpaRepository<Ticket, Long>, JpaSpecif
      */
     Page<Ticket> findByCustomerId(Long customerId, Pageable pageable);
 
+    /** 위 목록의 상태 필터 버전 (GET /api/tickets/my?status=) */
+    Page<Ticket> findByCustomerIdAndStatus(Long customerId, TicketStatus status, Pageable pageable);
+
     /**
      * 첫 응답 기한을 넘긴 미응답 티켓 ({@code SlaScheduler}).
      *

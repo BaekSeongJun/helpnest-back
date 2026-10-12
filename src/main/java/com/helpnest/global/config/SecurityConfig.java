@@ -1,6 +1,7 @@
 // @owner BSJ
 package com.helpnest.global.config;
 
+import com.helpnest.domain.auth.oauth.OAuthProperties;
 import com.helpnest.global.common.ApiResponse;
 import com.helpnest.global.error.CommonErrorCode;
 import com.helpnest.global.error.ErrorCode;
@@ -53,7 +54,7 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @Configuration
 @EnableMethodSecurity
-@EnableConfigurationProperties(JwtProperties.class)
+@EnableConfigurationProperties({JwtProperties.class, OAuthProperties.class})
 public class SecurityConfig {
 
     @Bean
@@ -74,8 +75,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/signup", "/api/auth/login", "/api/auth/refresh",
                                 "/api/auth/guest", "/api/auth/password/**", "/api/auth/guest/**",
+                                "/api/auth/email/**",
                                 "/api/attachments", "/api/tickets").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/faqs", "/api/faqs/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/oauth2/**").permitAll()   // 소셜 로그인 이동·콜백
                         .requestMatchers("/api/surveys/*").permitAll()
                         .requestMatchers("/ws/**").permitAll()       // STOMP 인증은 StompAuthInterceptor(박민재)
                         .requestMatchers("/actuator/health", "/error").permitAll()

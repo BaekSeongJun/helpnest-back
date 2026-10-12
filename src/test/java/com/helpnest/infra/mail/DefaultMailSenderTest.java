@@ -143,6 +143,21 @@ class DefaultMailSenderTest {
     }
 
     @Test
+    @DisplayName("이메일 인증 전송 실패: EMAIL_VERIFY FAILED 기록, 티켓 없음, 예외 전파 없음")
+    void emailVerificationFailure() {
+        when(transport.send(anyString(), anyString(), anyString())).thenThrow(new IllegalStateException("ses down"));
+
+        assertThatCode(() -> sender.sendEmailVerificationMail(new EmailVerificationMailCommand("hong@example.com",
+                "홍길동", "http://localhost:3000/verify-email?token=v1"))).doesNotThrowAnyException();
+
+        MailLog mail = savedMail();
+        assertThat(mail.getMailType()).isEqualTo(MailLog.Type.EMAIL_VERIFY);
+        assertThat(mail.getStatus()).isEqualTo(MailLog.Status.FAILED);
+        assertThat(mail.getTicketId()).isNull();
+        assertThat(mail.getBody()).contains("verify-email?token=v1");
+    }
+
+    @Test
     @DisplayName("이메일 마스킹")
     void mask() {
         assertThat(DefaultMailSender.mask("hong@example.com")).isEqualTo("h***@example.com");

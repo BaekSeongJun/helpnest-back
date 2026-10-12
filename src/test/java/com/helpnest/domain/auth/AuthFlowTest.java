@@ -2,6 +2,7 @@
 package com.helpnest.domain.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
@@ -112,6 +113,25 @@ class AuthFlowTest {
         assertThat(again.getResponse().getCookie("refreshToken").getValue())
                 .isNotEqualTo(second.getValue());
         assertThat(refresh(second).getResponse().getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("회원 탈퇴 → 다시 로그인·재발급 불가")
+    void withdraw() throws Exception {
+        MvcResult login = login();
+        Cookie cookie = login.getResponse().getCookie("refreshToken");
+
+        mockMvc.perform(delete("/api/members/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken(login)))
+                .andExpect(status().isOk());
+
+        assertThat(refresh(cookie).getResponse().getStatus()).isEqualTo(401);
+        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","password":"%s"}
+                                """.formatted(EMAIL, PASSWORD)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("AUTH_INACTIVE_MEMBER"));
     }
 
     @Test

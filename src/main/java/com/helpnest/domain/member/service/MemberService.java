@@ -9,6 +9,7 @@ import com.helpnest.domain.member.dto.PasswordChangeRequest;
 import com.helpnest.domain.member.dto.ProfileUpdateRequest;
 import com.helpnest.domain.member.entity.Member;
 import com.helpnest.domain.member.entity.MemberRole;
+import com.helpnest.domain.member.entity.MemberStatus;
 import com.helpnest.domain.member.error.MemberErrorCode;
 import com.helpnest.domain.member.event.AgentAvailabilityChangedEvent;
 import com.helpnest.domain.member.repository.MemberRepository;
@@ -53,6 +54,19 @@ public class MemberService {
         }
         member.changePassword(passwordEncoder.encode(req.newPassword()));
         refreshTokenRepository.revokeAllByMemberId(memberId);
+    }
+
+    /**
+     * 회원 탈퇴 = 비활성화 + Refresh 전부 폐기. 로그인·재발급·소셜 로그인이 모두 AUTH_INACTIVE_MEMBER 로 막힌다.
+     * ponytail: 개인정보와 이메일 점유는 그대로 남는다(같은 이메일 재가입 불가, 복구는 ADMIN 이 활성화).
+     * 재가입·개인정보 파기가 필요해지면 이메일·이름·연락처 익명화 + member_social 삭제로 바꾼다.
+     * 이미 발급된 Access 토큰은 만료(30분)까지 유효 — AdminMemberService 의 비활성화와 같은 한계
+     */
+    @Transactional
+    public void withdraw(Long memberId) {
+        // 벌크 update 가 영속성 컨텍스트를 비우므로 폐기 뒤에 읽는다
+        refreshTokenRepository.revokeAllByMemberId(memberId);
+        findOrThrow(memberId).changeStatus(MemberStatus.INACTIVE);
     }
 
     private Member findOrThrow(Long memberId) {

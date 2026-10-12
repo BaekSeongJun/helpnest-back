@@ -49,6 +49,18 @@ app:
   front-origin: ${FRONT_ORIGIN}
   # 프론트 proxy.ts 와 같은 값. 맞을 때만 Amplify 경유로 보고 XFF 오른쪽 3번째를 클라이언트 IP 로 쓴다(RateLimitFilter, back #105). 비면 직접 호출로만 본다
   proxy-secret: ${PROXY_SECRET:}
+  auth:
+    # true 면 가입 회원이 PENDING 으로 저장되고 인증 메일 링크를 눌러야 로그인된다. 인증 메일(back #117)이 들어오기 전까지 false
+    email-verification: ${EMAIL_VERIFICATION:false}
+  # 소셜 로그인. id·secret 이 비어 있는 제공자는 꺼진다(버튼을 눌러도 로그인 화면으로 돌아옴).
+  # 제공자 콘솔의 Redirect URI: {FRONT_ORIGIN}/api/auth/oauth2/callback/{google|kakao}
+  oauth2:
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+    kakao:
+      client-id: ${KAKAO_CLIENT_ID:}
+      client-secret: ${KAKAO_CLIENT_SECRET:}
 
 server:
   forward-headers-strategy: none   # XFF 원문을 RateLimitFilter 가 직접 해석한다 — framework 는 위조 가능한 가장 왼쪽 값을 쓴다(back #105)

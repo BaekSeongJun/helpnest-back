@@ -7,7 +7,7 @@ import java.time.format.DateTimeFormatter;
 import org.springframework.web.util.HtmlUtils;
 
 /**
- * 메일 HTML 템플릿 4종 (docs/05 §5·§5.1). 사용자 값은 모두 이스케이프한다.
+ * 메일 HTML 템플릿 5종 (docs/05 §5·§5.1). 사용자 값은 모두 이스케이프한다.
  * ponytail: Java text block 렌더링, 템플릿이 늘거나 디자이너가 편집해야 하면 Thymeleaf(CR) 도입
  */
 public final class MailTemplates {
@@ -55,6 +55,15 @@ public final class MailTemplates {
                 """.formatted(target, target);
         return new MailContent("[HelpNest] %s 재설정 안내".formatted(target),
                 layout(body, "%s 재설정".formatted(target), cmd.resetUrl()));
+    }
+
+    public static MailContent emailVerification(EmailVerificationMailCommand cmd) {
+        String body = """
+                <p>%s님, HelpNest 가입을 환영합니다.</p>
+                <p>아래 버튼을 눌러 이메일 인증을 완료해 주세요. 링크는 <strong>30분</strong> 동안 유효합니다.</p>
+                <p style="color:#71717a">가입하지 않으셨다면 이 메일을 무시하셔도 됩니다.</p>
+                """.formatted(esc(cmd.name()));
+        return new MailContent("[HelpNest] 이메일 인증 안내", layout(body, "이메일 인증하기", cmd.verifyUrl()));
     }
 
     // 공통 레이아웃: 헤더 HelpNest + 본문 + 버튼 1개

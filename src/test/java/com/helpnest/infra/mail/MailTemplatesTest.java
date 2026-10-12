@@ -52,6 +52,17 @@ class MailTemplatesTest {
     }
 
     @Test
+    @DisplayName("이메일 인증: 이름(이스케이프)·verifyUrl·30분 안내 포함")
+    void emailVerification() {
+        MailContent mail = MailTemplates.emailVerification(new EmailVerificationMailCommand("a@b.com",
+                "<b>홍길동</b>", "http://localhost:3000/verify-email?token=v1"));
+
+        assertThat(mail.subject()).isEqualTo("[HelpNest] 이메일 인증 안내");
+        assertThat(mail.html()).contains("&lt;b&gt;홍길동&lt;/b&gt;님", "verify-email?token=v1", "30분")
+                .doesNotContain("<b>홍길동");
+    }
+
+    @Test
     @DisplayName("사용자 값과 URL 은 HTML 이스케이프")
     void escapesUserInput() {
         var cmd = new ResolvedMailCommand(1L, "<script>alert(1)</script>", "x@y.com", "T-0003", "제목",
