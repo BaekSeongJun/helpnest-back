@@ -73,6 +73,11 @@ public class DefaultMailSender implements MailSender {
         send(null, null, command.email(), type, MailTemplates.passwordReset(command));
     }
 
+    @Override
+    public void sendEmailVerificationMail(EmailVerificationMailCommand command) {
+        send(null, null, command.email(), MailLog.Type.EMAIL_VERIFY, MailTemplates.emailVerification(command));
+    }
+
     // ponytail: 전송 후 1회 저장 — 전송 직후 앱이 죽으면 기록 누락, 필요하면 PENDING 선저장으로 전환
     private void send(Long ticketId, String ticketNo, String email, MailLog.Type type, MailContent content) {
         MailLog mail = MailLog.builder()
