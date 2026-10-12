@@ -24,6 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class FaqService {
 
     private static final int SUGGEST_LIMIT = 3;
+    /** 단어 끝에서 떼어 보는 조사 — 두 글자짜리를 먼저 본다 */
+    private static final List<String> PARTICLES = List.of("으로", "에서", "에게", "까지", "부터",
+            "은", "는", "이", "가", "을", "를", "에", "의", "도", "로", "과", "와", "만");
 
     private final FaqRepository faqRepository;
 
@@ -35,11 +38,11 @@ public class FaqService {
     }
 
     /**
-     * 제목을 공백으로 나눈 단어(2자 이상) 중 질문·답변에 많이 들어 있는 글 순, 같으면 조회수 순으로 최대 3건.
+     * 제목을 공백·문장부호로 나눈 단어(2자 이상) 중 질문·답변에 많이 들어 있는 글 순, 같으면 조회수 순으로 최대 3건.
      * 제목 전체를 한 덩어리로 찾으면 "환불 언제 되나요" 같은 문장은 어떤 글에도 일치하지 않는다.
      * 한 글자 단어는 거의 모든 글에 걸려 추천 의미가 없으므로 뺀다.
      * ponytail: 공개 글 전체를 메모리에서 채점 — FAQ 는 수십~수백 건 전제(search 와 같은 가정). 많아지면 pg_trgm/전문검색.
-     * 조사가 붙은 단어("환불은")는 일치하지 않는다 — 형태소 분석이 필요해지면 그때 검색 엔진으로.
+     * ponytail: 조사는 끝의 한 개만 떼어 본다("환불은" → "환불") — 어미("환불되나요")는 못 뗀다. 형태소 분석이 필요해지면 검색 엔진으로.
      */
     public List<FaqResponse> suggest(String q) {
         return rank(q, SUGGEST_LIMIT).stream().map(FaqResponse::from).toList();
@@ -47,7 +50,7 @@ public class FaqService {
 
     /** 추천 채점 본체 — 접수 폼 추천과 AI 상담 근거 조회(FaqQueryPort)가 같이 쓴다 */
     public List<Faq> rank(String q, int limit) {
-        List<String> words = q == null ? List.of() : Arrays.stream(q.toLowerCase().split("\\s+"))
+        List<String> words = q == null ? List.of() : Arrays.stream(q.toLowerCase().split("[^\\p{L}\\p{N}]+"))
                 .filter(w -> w.length() >= 2).distinct().toList();
         if (words.isEmpty()) {
             return List.of();
@@ -57,7 +60,8 @@ public class FaqService {
         return faqRepository.findByPublishedTrue().stream()
                 .map(f -> {
                     String text = (f.getQuestion() + " " + f.getAnswer()).toLowerCase();
-                    return new Scored(f, words.stream().filter(text::contains).count());
+                    return new Scored(f, words.stream()
+                            .filter(w -> text.contains(w) || text.contains(stripParticle(w))).count());
                 })
                 .filter(s -> s.score() > 0)
                 .sorted(Comparator.comparingLong(Scored::score).reversed()
@@ -65,6 +69,15 @@ public class FaqService {
                 .limit(Math.max(limit, 0))
                 .map(Scored::faq)
                 .toList();
+    }
+
+    /** 끝의 조사 하나를 뗀다. 떼고 2자 미만이면 그대로("문의" 를 "문" 으로 만들지 않는다) */
+    private static String stripParticle(String word) {
+        return PARTICLES.stream()
+                .filter(p -> word.endsWith(p) && word.length() - p.length() >= 2)
+                .findFirst()
+                .map(p -> word.substring(0, word.length() - p.length()))
+                .orElse(word);
     }
 
     /** 공개 글 상세 + 조회수 +1. 비공개·없는 글은 같은 404 (존재 여부 비노출) */
