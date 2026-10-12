@@ -160,6 +160,18 @@ class FaqFlowTest {
         // 조사·문장부호가 붙어도 찾는다 (KW + "은?" → KW)
         assertThat(faqQueryPort.findPublishedByQuestion(KW + "은? 없는말zz", 5))
                 .isNotEmpty().allSatisfy(f -> assertThat(f.question()).contains(KW));
+        // 어미도 뗀다(KW + "되나요" → KW), 물음말뿐이면 찾지 않는다
+        assertThat(faqQueryPort.findPublishedByQuestion(KW + "되나요", 5))
+                .isNotEmpty().allSatisfy(f -> assertThat(f.question()).contains(KW));
+        assertThat(faqQueryPort.findPublishedByQuestion("언제 어떻게 되나요?", 5)).isEmpty();
+        // 제목에 단어가 있는 글이, 답변에만 있고 조회수가 높은 글보다 먼저
+        Faq titled = faqRepository.save(Faq.builder().category(TicketCategory.ETC).question("제목우선zq 글")
+                .answer("답").published(true).createdBy(lead.getId()).build());
+        Faq mentioned = faqRepository.save(Faq.builder().category(TicketCategory.ETC).question("다른 글")
+                .answer("제목우선zq 언급").published(true).createdBy(lead.getId()).build());
+        faqRepository.incrementViewCount(mentioned.getId());
+        assertThat(faqQueryPort.findPublishedByQuestion("제목우선zq", 2))
+                .extracting(FaqInfo::faqId).containsExactly(titled.getId(), mentioned.getId());
     }
 
     private Faq faq(TicketCategory category, String question, boolean isPublished) {
