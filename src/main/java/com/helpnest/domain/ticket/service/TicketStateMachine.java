@@ -59,12 +59,9 @@ public class TicketStateMachine {
     /**
      * PRD 5장 전이표의 허용 전이 7건을 그대로 옮긴다. 주석은 전이 사유(전이표 stateDiagram 원문).
      *
-     * <p>참고: 재배정 2건(→ ASSIGNED)의 수행자에 AGENT 가 포함된 것은 전이표 '수행자' 열이
-     * 행 단위로 "담당 AGENT, LEAD/ADMIN"이라 적혀 있기 때문이다. 반면 PRD 2.1 권한 매트릭스와
-     * FR-ASN-02 는 수동 배정/재배정을 LEAD/ADMIN 전용으로 규정한다. 문서 간 충돌이며,
-     * 여기서는 태스크가 지정한 권위 문서인 5장 전이표를 따른다.
-     * TODO(PMJ): 재배정 주체를 팀과 확정한 뒤 이 두 줄에서 AGENT 를 빼거나(2.1 기준)
-     * S1 TicketService 의 배정 API 에서 LEAD/ADMIN 만 허용하도록 좁힌다.
+     * <p>재배정 2건(→ ASSIGNED)은 LEAD/ADMIN 전용이다 — PRD 2.1 권한 매트릭스·FR-ASN-02 기준으로
+     * 팀 확정(#116). 5장 전이표의 수행자 열("담당 AGENT, LEAD/ADMIN")은 이 결정에 맞춰 문서 쪽을 고친다.
+     * 상담원이 다른 상담원에게 넘기려면 팀장에게 요청한다.
      */
     private static Map<TicketStatus, Map<TicketStatus, Set<ActorRole>>> buildTransitions() {
         Map<TicketStatus, Map<TicketStatus, Set<ActorRole>>> table = new EnumMap<>(TicketStatus.class);
@@ -73,9 +70,9 @@ public class TicketStateMachine {
         }
 
         table.get(RECEIVED).put(ASSIGNED, roles(SYSTEM, LEAD, ADMIN));    // 자동/수동 배정
-        table.get(ASSIGNED).put(ASSIGNED, roles(AGENT, LEAD, ADMIN));     // 재배정
+        table.get(ASSIGNED).put(ASSIGNED, roles(LEAD, ADMIN));            // 재배정
         table.get(ASSIGNED).put(IN_PROGRESS, roles(AGENT, LEAD, ADMIN));  // 처리 시작 / 첫 답변
-        table.get(IN_PROGRESS).put(ASSIGNED, roles(AGENT, LEAD, ADMIN));  // 재배정
+        table.get(IN_PROGRESS).put(ASSIGNED, roles(LEAD, ADMIN));         // 재배정
         table.get(IN_PROGRESS).put(RESOLVED, roles(AGENT, LEAD, ADMIN));  // 해결 처리
         table.get(RESOLVED).put(IN_PROGRESS, roles(SYSTEM, CUSTOMER));    // 고객 추가 답글(재문의)
         table.get(RESOLVED).put(CLOSED, roles(SYSTEM, CUSTOMER));         // 설문 제출 / 72시간 경과
