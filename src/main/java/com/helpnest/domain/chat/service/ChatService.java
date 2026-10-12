@@ -55,6 +55,9 @@ public class ChatService {
     /** PRD Q16 — 대기 시간 초과 기준 */
     static final Duration WAIT_LIMIT = Duration.ofMinutes(5);
 
+    /** 상담원이 AI 대화임을 알아보도록 첫 메시지 앞에 붙인다(docs/04 §10) */
+    static final String AI_TRANSCRIPT_PREFIX = "[AI 상담 내용]\n";
+
     private static final Set<ChatRoomStatus> ACTIVE = EnumSet.of(ChatRoomStatus.WAITING, ChatRoomStatus.OPEN);
 
     private final ChatRoomRepository roomRepository;
@@ -72,11 +75,21 @@ public class ChatService {
      * <p>같은 고객의 동시 요청 두 건도 방 하나로 모인다 — 조회 후 저장이면 둘 다 "없음"을 보고 각자
      * 저장하므로, 넣기를 DB 부분 유니크 인덱스에 맡기고 ON CONFLICT 로 충돌을 무시한 뒤 다시 읽는다(#116).
      * 유니크 위반 예외를 잡는 방식은 PostgreSQL 이 그 트랜잭션을 중단 상태로 만들어 다시 읽을 수 없다.
+     *
+     * <p>AI 상담 내용은 <b>이번 요청이 방을 만들었을 때만</b> 고객 첫 메시지로 저장한다(FR-CHT-07).
+     * 이미 있던 방에 넣으면 진행 중 대화 가운데에 끼어든다. 만들었는지는 넣은 행 수(1/0)로 안다 —
+     * 다시 읽은 방의 메시지 유무로 판단하면 동시 요청 두 건이 모두 "비어 있음"을 볼 수 있다.
+     *
+     * @param aiTranscript null·공백이면 저장하지 않는다
      */
     @Transactional
-    public Long openOrGetRoom(Long customerId) {
-        roomRepository.insertWaitingIfAbsent(customerId, OffsetDateTime.now());
-        return roomRepository.findFirstByCustomerIdAndStatusIn(customerId, ACTIVE).orElseThrow().getId();
+    public Long openOrGetRoom(Long customerId, String aiTranscript) {
+        boolean created = roomRepository.insertWaitingIfAbsent(customerId, OffsetDateTime.now()) == 1;
+        Long roomId = roomRepository.findFirstByCustomerIdAndStatusIn(customerId, ACTIVE).orElseThrow().getId();
+        if (created && aiTranscript != null && !aiTranscript.isBlank()) {
+            messageRepository.save(new ChatMessage(roomId, customerId, AI_TRANSCRIPT_PREFIX + aiTranscript.strip()));
+        }
+        return roomId;
     }
 
     /**
