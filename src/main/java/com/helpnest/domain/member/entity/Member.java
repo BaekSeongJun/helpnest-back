@@ -30,8 +30,8 @@ public class Member extends BaseTimeEntity {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
-    /** BCrypt 해시 */
-    @Column(nullable = false, length = 100)
+    /** BCrypt 해시. 소셜로만 가입한 회원은 null — 비밀번호 로그인 불가, "비밀번호 찾기"로 만들 수 있다 */
+    @Column(length = 100)
     private String password;
 
     @Column(nullable = false, length = 50)
@@ -104,7 +104,7 @@ public class Member extends BaseTimeEntity {
         this.available = available;
     }
 
-    /** @param passwordHash BCrypt 해시. Refresh 폐기는 호출자가 함께 한다 */
+    /** @param passwordHash BCrypt 해시(null 이면 비밀번호 로그인을 막는다). Refresh 폐기는 호출자가 함께 한다 */
     public void changePassword(String passwordHash) {
         this.password = passwordHash;
     }

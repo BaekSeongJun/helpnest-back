@@ -94,18 +94,18 @@ public class AuthController {
             @CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken) {
         authService.logout(refreshToken);
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, refreshCookie("", Duration.ZERO).toString())
+                .header(HttpHeaders.SET_COOKIE, refreshCookie(jwtProperties, "", Duration.ZERO).toString())
                 .body(ApiResponse.ok());
     }
 
     private ResponseEntity<ApiResponse<AuthResponse>> withRefreshCookie(AuthService.Tokens tokens) {
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, refreshCookie(tokens.refreshToken(), jwtProperties.refreshTtl()).toString())
+                .header(HttpHeaders.SET_COOKIE, refreshCookie(jwtProperties, tokens.refreshToken(), jwtProperties.refreshTtl()).toString())
                 .body(ApiResponse.ok(tokens.body()));
     }
 
     /** httpOnly·SameSite=Lax·Path=/ (04 §2). Secure 는 로컬 http 개발만 끔 (REFRESH_COOKIE_SECURE) */
-    private ResponseCookie refreshCookie(String value, Duration maxAge) {
+    static ResponseCookie refreshCookie(JwtProperties jwtProperties, String value, Duration maxAge) {
         return ResponseCookie.from(REFRESH_COOKIE, value)
                 .httpOnly(true)
                 .secure(jwtProperties.refreshCookieSecure())
