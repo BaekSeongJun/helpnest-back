@@ -11,6 +11,12 @@ public enum AuthErrorCode implements ErrorCode {
     INACTIVE_MEMBER(HttpStatus.FORBIDDEN, "AUTH_INACTIVE_MEMBER", "비활성화된 계정입니다. 관리자에게 문의해 주세요."),
     /** 가입 후 인증 링크를 누르지 않음. 비밀번호가 맞을 때만 낸다 → 프론트는 재발송 안내 */
     EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN, "AUTH_EMAIL_NOT_VERIFIED", "이메일 인증이 필요합니다. 메일의 인증 링크를 확인해 주세요."),
+    /** 소셜 로그인: 취소·state 불일치·제공자 오류·꺼진 제공자를 구분하지 않는다 */
+    OAUTH_FAILED(HttpStatus.UNAUTHORIZED, "AUTH_OAUTH_FAILED", "소셜 로그인에 실패했습니다. 다시 시도해 주세요."),
+    /** 제공자가 이메일을 주지 않았거나 본인 확인된 이메일이 아님 */
+    OAUTH_EMAIL_REQUIRED(HttpStatus.FORBIDDEN, "AUTH_OAUTH_EMAIL_REQUIRED", "이메일 제공에 동의해야 소셜 로그인을 할 수 있습니다."),
+    /** 직원 계정 이메일로 소셜 로그인 시도 */
+    OAUTH_STAFF_NOT_ALLOWED(HttpStatus.FORBIDDEN, "AUTH_OAUTH_STAFF_NOT_ALLOWED", "직원 계정은 이메일과 비밀번호로 로그인해 주세요."),
     /** Refresh 없음·만료·폐기·재사용 → 프론트는 로그인 화면으로 */
     REFRESH_INVALID(HttpStatus.UNAUTHORIZED, "AUTH_REFRESH_INVALID", "로그인이 만료되었습니다. 다시 로그인해 주세요."),
     /** 비회원 조회: 티켓 없음·이메일 불일치·비밀번호 오류·회원 티켓을 구분하지 않는다 (열거 방지) */

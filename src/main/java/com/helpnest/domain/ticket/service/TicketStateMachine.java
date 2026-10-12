@@ -44,8 +44,8 @@ import com.helpnest.domain.ticket.entity.TicketStatus;
  * 본인 담당 여부 검증은 TicketService 가 별도로 수행해야 한다. 이 경계를 넘겨 AGENT 판정을
  * 통과했다는 사실만으로 남의 티켓을 처리하게 두면 권한 우회가 된다.
  *
- * <p>TODO(PMJ): S1 에서 TicketErrorCode.INVALID_TRANSITION(TICKET_INVALID_TRANSITION, 409)
- * 을 추가하고 위 예시대로 조립한다(PRD FR-TKT-03, global/error/ErrorCode Javadoc 규약).
+ * <p>위 조립은 {@code TicketService.changeStatus} 가 한다 — 거부 시 {@code TICKET_INVALID_TRANSITION}(409,
+ * PRD FR-TKT-03).
  */
 @Component
 public class TicketStateMachine {
