@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.helpnest.domain.ticket.dto.CustomerReplyCreateRequest;
@@ -22,6 +23,7 @@ import com.helpnest.domain.ticket.dto.TicketCreateRequest;
 import com.helpnest.domain.ticket.dto.TicketCreateResponse;
 import com.helpnest.domain.ticket.dto.TicketDetailResponse;
 import com.helpnest.domain.ticket.dto.TicketListItemResponse;
+import com.helpnest.domain.ticket.entity.TicketStatus;
 import com.helpnest.domain.ticket.error.TicketErrorCode;
 import com.helpnest.domain.ticket.service.CustomerTicketService;
 import com.helpnest.domain.ticket.service.TicketReplyService;
@@ -63,15 +65,18 @@ public class TicketController {
      * <p>CUSTOMER 는 역할 계층 밖이라 {@code hasRole('CUSTOMER')} 하나로 직원(AGENT+)과
      * Guest 토큰이 함께 403 이 된다. 직원이 호출하면 본인 memberId 로 조회해 빈 목록이
      * 나올 뿐이었지만, 04 §7 과 어긋나 막는다 (CR #75).
+     *
+     * <p>{@code status} 를 주면 그 상태만, 없으면 전체를 본다 (#116).
      */
     @GetMapping("/my")
     @PreAuthorize("hasRole('CUSTOMER')")
     public ResponseEntity<ApiResponse<PageResponse<TicketListItemResponse>>> myTickets(
             @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) TicketStatus status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.ok(
-                customerTicketService.findMyTickets(JwtProvider.memberId(jwt), pageable)));
+                customerTicketService.findMyTickets(JwtProvider.memberId(jwt), status, pageable)));
     }
 
     /**
