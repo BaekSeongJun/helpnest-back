@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.helpnest.domain.chat.dto.ChatCloseRequest;
 import com.helpnest.domain.chat.dto.ChatConvertResponse;
 import com.helpnest.domain.chat.dto.ChatMessageResponse;
+import com.helpnest.domain.chat.dto.ChatRequest;
 import com.helpnest.domain.chat.dto.ChatRoomResponse;
 import com.helpnest.domain.chat.dto.ChatStatusPayload;
 import com.helpnest.domain.chat.scheduler.ChatQueueScheduler;
@@ -28,6 +29,7 @@ import com.helpnest.domain.chat.service.ChatService;
 import com.helpnest.global.common.ApiResponse;
 import com.helpnest.global.security.JwtProvider;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -50,13 +52,14 @@ public class ChatController {
 
     /**
      * 채팅 요청. 방을 WAITING 으로 먼저 커밋한 뒤 연결을 1회 시도한다 — 연결 실패가 요청 실패가
-     * 되지 않게 하려는 분리다({@link ChatService} 클래스 주석).
+     * 되지 않게 하려는 분리다({@link ChatService} 클래스 주석). 본문은 선택이다 — 없으면 AI 상담 없이 요청한 것이다.
      */
     @PostMapping
     @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<ApiResponse<ChatStatusPayload>> request(@AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<ApiResponse<ChatStatusPayload>> request(
+            @Valid @RequestBody(required = false) ChatRequest body, @AuthenticationPrincipal Jwt jwt) {
         Long customerId = JwtProvider.memberId(jwt);
-        Long roomId = chatService.openOrGetRoom(customerId);
+        Long roomId = chatService.openOrGetRoom(customerId, body == null ? null : body.aiTranscript());
         chatQueue.match(roomId);
         return ResponseEntity.ok(ApiResponse.ok(chatService.status(roomId, customerId)));
     }

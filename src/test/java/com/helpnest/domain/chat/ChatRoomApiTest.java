@@ -24,6 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -105,6 +106,11 @@ class ChatRoomApiTest {
         return mockMvc.perform(post("/api/chat/rooms").header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
     }
 
+    private ResultActions requestChatWith(String token, String json) throws Exception {
+        return mockMvc.perform(post("/api/chat/rooms").header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+
     private ChatRoom roomOf(Long customerId) {
         return roomRepository.findTop50ByCustomerIdOrderByIdDesc(customerId).getFirst();
     }
@@ -173,7 +179,7 @@ class ChatRoomApiTest {
             CountDownLatch start = new CountDownLatch(1);
             Callable<Long> request = () -> {
                 start.await();
-                return chatService.openOrGetRoom(customer2);
+                return chatService.openOrGetRoom(customer2, null);
             };
             try {
                 Future<Long> first = pool.submit(request);
@@ -186,6 +192,37 @@ class ChatRoomApiTest {
                 pool.awaitTermination(10, TimeUnit.SECONDS);
                 jdbcTemplate.update("delete from chat_room where customer_id = ? and room_id > ?", customer2, maxBefore);
             }
+        }
+
+        @Test
+        @DisplayName("aiTranscript 는 새 방의 고객 첫 메시지로 저장된다")
+        void AI_상담_내용() throws Exception {
+            agentsAvailable(false);
+            requestChatWith(customer1Token, "{\"aiTranscript\":\"고객: 환불은?\\nAI: 7일 이내 가능합니다\"}")
+                    .andExpect(status().isOk());
+
+            List<ChatMessage> messages = messageRepository.findByRoomIdOrderByIdAsc(roomOf(customer1).getId());
+            assertThat(messages).singleElement().satisfies(m -> {
+                assertThat(m.getSenderId()).isEqualTo(customer1);
+                assertThat(m.getContent()).isEqualTo("[AI 상담 내용]\n고객: 환불은?\nAI: 7일 이내 가능합니다");
+            });
+        }
+
+        @Test
+        @DisplayName("진행 중 방이 있으면 aiTranscript 는 무시한다")
+        void AI_상담_내용_기존_방() throws Exception {
+            agentsAvailable(false);
+            requestChat(customer1Token);
+            requestChatWith(customer1Token, "{\"aiTranscript\":\"나중 대화\"}").andExpect(status().isOk());
+
+            assertThat(messageRepository.findByRoomIdOrderByIdAsc(roomOf(customer1).getId())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("aiTranscript 2,000자 초과는 400")
+        void AI_상담_내용_길이() throws Exception {
+            requestChatWith(customer1Token, "{\"aiTranscript\":\"" + "가".repeat(2_001) + "\"}")
+                    .andExpect(status().isBadRequest());
         }
 
         @Test

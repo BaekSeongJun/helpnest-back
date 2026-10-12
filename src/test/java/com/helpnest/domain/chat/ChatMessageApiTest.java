@@ -75,7 +75,7 @@ class ChatMessageApiTest {
     void openRoom() {
         customer = memberRepository.findByEmail("customer1@helpnest.local").orElseThrow().getId();
         otherCustomer = memberRepository.findByEmail("customer2@helpnest.local").orElseThrow().getId();
-        Long roomId = chatService.openOrGetRoom(customer);
+        Long roomId = chatService.openOrGetRoom(customer, null);
         assertThat(chatService.tryMatch(roomId)).as("시드 상담원이 available 이어야 한다").isTrue();
         room = roomRepository.findById(roomId).orElseThrow();
         agent = room.getAgentId();
