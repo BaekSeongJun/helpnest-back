@@ -26,6 +26,7 @@ import com.helpnest.domain.ticket.entity.TicketChannel;
 import com.helpnest.domain.ticket.entity.TicketPriority;
 import com.helpnest.domain.ticket.entity.TicketStatus;
 import com.helpnest.domain.ticket.event.TicketAssignedEvent;
+import com.helpnest.domain.ticket.event.TicketClassifiedEvent;
 import com.helpnest.domain.ticket.event.TicketCreatedEvent;
 import com.helpnest.domain.ticket.event.TicketStatusChangedEvent;
 import com.helpnest.domain.ticket.repository.TicketRepository;
@@ -51,17 +52,18 @@ class ConsoleTicketBroadcasterTest {
     }
 
     @Test
-    @DisplayName("접수는 CREATED, 상태 변경·배정은 UPDATED — 현재 상태·우선순위·담당자를 싣는다")
+    @DisplayName("접수는 CREATED, 상태 변경·배정·분류는 UPDATED — 현재 상태·우선순위·담당자를 싣는다")
     void 신호_내용() {
         assignedTicket();
 
         broadcaster.onCreated(new TicketCreatedEvent(5L));
         broadcaster.onStatusChanged(new TicketStatusChangedEvent(5L, TicketStatus.RECEIVED, TicketStatus.ASSIGNED, null));
         broadcaster.onAssigned(new TicketAssignedEvent(5L, 3L));
+        broadcaster.onClassified(new TicketClassifiedEvent(5L));
 
         verify(template).convertAndSend(ConsoleTicketBroadcaster.DESTINATION,
                 new ConsoleTicketEvent(5L, "CREATED", TicketStatus.ASSIGNED, TicketPriority.NORMAL, 3L));
-        verify(template, times(2)).convertAndSend(ConsoleTicketBroadcaster.DESTINATION,
+        verify(template, times(3)).convertAndSend(ConsoleTicketBroadcaster.DESTINATION,
                 new ConsoleTicketEvent(5L, "UPDATED", TicketStatus.ASSIGNED, TicketPriority.NORMAL, 3L));
     }
 
