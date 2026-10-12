@@ -130,6 +130,18 @@ class DefaultMailSenderTest {
     }
 
     @Test
+    @DisplayName("공개 답변 없이 해결(finalReply null·공백) → LLM 호출 없이 답변 요약 칸 없는 메일")
+    void resolvedWithoutReply() {
+        when(transport.send(anyString(), anyString(), anyString())).thenReturn(MailLog.Status.LOGGED);
+
+        sender.sendResolvedMail(resolved(null));
+
+        assertThat(savedMail().getBody()).contains("해결되었습니다", "설문").doesNotContain("답변 요약");
+        assertThat(sender.summarize(" ")).isEmpty();
+        verify(llm, never()).structured(anyString(), any(), any());
+    }
+
+    @Test
     @DisplayName("로그에는 유형·티켓번호·마스킹 이메일만, 원문 이메일·토큰 URL 없음")
     void noSensitiveDataInLog(CapturedOutput output) {
         when(transport.send(anyString(), anyString(), anyString())).thenReturn(MailLog.Status.LOGGED);
