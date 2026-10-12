@@ -1,7 +1,9 @@
 // @owner BSJ
 package com.helpnest.domain.faq.port;
 
+import com.helpnest.domain.faq.entity.Faq;
 import com.helpnest.domain.faq.repository.FaqRepository;
+import com.helpnest.domain.faq.service.FaqService;
 import com.helpnest.domain.ticket.entity.TicketCategory;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class FaqQueryAdapter implements FaqQueryPort {
 
     private final FaqRepository faqRepository;
+    private final FaqService faqService;
 
     /** 조회수 높은 순. 알 수 없는 유형·limit 0 이하는 빈 목록 (AI 초안이 FAQ 없이도 진행되도록 예외 대신) */
     @Override
@@ -26,8 +29,17 @@ public class FaqQueryAdapter implements FaqQueryPort {
         }
         return faqRepository.search(true, parsed, FaqRepository.containsPattern(keyword),
                         PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "viewCount")))
-                .map(f -> new FaqInfo(f.getId(), f.getCategory().name(), f.getQuestion(), f.getAnswer()))
+                .map(FaqQueryAdapter::info)
                 .getContent();
+    }
+
+    @Override
+    public List<FaqInfo> findPublishedByQuestion(String question, int limit) {
+        return faqService.rank(question, limit).stream().map(FaqQueryAdapter::info).toList();
+    }
+
+    private static FaqInfo info(Faq f) {
+        return new FaqInfo(f.getId(), f.getCategory().name(), f.getQuestion(), f.getAnswer());
     }
 
     private static TicketCategory parse(String category) {

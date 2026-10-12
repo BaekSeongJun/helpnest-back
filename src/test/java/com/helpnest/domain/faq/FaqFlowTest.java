@@ -153,6 +153,10 @@ class FaqFlowTest {
                 .andExpect(jsonPath("$.data.length()").value(0));
         mockMvc.perform(get("/api/faqs/suggest"))
                 .andExpect(jsonPath("$.data.length()").value(0));
+        // 포트(AI 상담 근거)도 같은 채점 — limit 만 호출자가 정한다
+        assertThat(faqQueryPort.findPublishedByQuestion(KW + " 배송", 1))
+                .extracting(FaqInfo::question).containsExactly(KW + " 배송 공개");
+        assertThat(faqQueryPort.findPublishedByQuestion("없는말zz", 5)).isEmpty();
     }
 
     private Faq faq(TicketCategory category, String question, boolean isPublished) {
