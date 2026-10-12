@@ -11,6 +11,7 @@
 /src/main/java/com/helpnest/domain/dashboard/agent/ @BaekSeongJun
 /src/main/java/com/helpnest/domain/report/      @s-sujin-99
 /src/main/java/com/helpnest/infra/              @s-sujin-99
+/src/main/java/com/helpnest/domain/auth/verify/ @s-sujin-99
 /src/main/resources/application-ai.yml          @s-sujin-99
 /src/main/resources/application-aws.yml         @s-sujin-99
 /src/main/resources/application-prod.yml        @s-sujin-99
