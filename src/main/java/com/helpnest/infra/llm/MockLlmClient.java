@@ -1,6 +1,7 @@
 // @owner SSJ
 package com.helpnest.infra.llm;
 
+import com.helpnest.domain.ai.dto.AiChatResult;
 import com.helpnest.domain.ai.dto.ClassificationResult;
 import com.helpnest.domain.ai.dto.ClassificationResult.Category;
 import com.helpnest.domain.ai.dto.ClassificationResult.Sentiment;
@@ -40,8 +41,15 @@ public class MockLlmClient implements LlmClient {
             [확인 필요: 주문번호·처리 예정일]
             추가로 궁금하신 점이 있으시면 언제든 문의해 주세요.""";
 
+    // AI-4 상담 로컬 데모용 (근거 FAQ 가 있을 때만 호출된다)
+    private static final String CHAT_ANSWER =
+            "아래 참고 FAQ에 안내된 절차를 확인해 주세요. 해결되지 않으면 [상담원 연결]을 눌러 주세요.";
+
     @Override
     public <T> T structured(String system, String user, Class<T> type) {
+        if (type == AiChatResult.class) {
+            return type.cast(new AiChatResult(CHAT_ANSWER));
+        }
         if (type == DraftResult.class) {
             return type.cast(new DraftResult(DRAFT));
         }
