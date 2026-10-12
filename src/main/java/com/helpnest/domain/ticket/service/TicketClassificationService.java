@@ -3,6 +3,7 @@ package com.helpnest.domain.ticket.service;
 
 import java.util.Locale;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +17,7 @@ import com.helpnest.domain.ticket.entity.TicketCategory;
 import com.helpnest.domain.ticket.entity.TicketHistory;
 import com.helpnest.domain.ticket.entity.TicketPriority;
 import com.helpnest.domain.ticket.error.TicketErrorCode;
+import com.helpnest.domain.ticket.event.TicketClassifiedEvent;
 import com.helpnest.domain.ticket.repository.TicketHistoryRepository;
 import com.helpnest.domain.ticket.repository.TicketRepository;
 import com.helpnest.global.error.BusinessException;
@@ -42,6 +44,7 @@ public class TicketClassificationService {
     private final TicketHistoryRepository ticketHistoryRepository;
     private final SlaPolicyRepository slaPolicyRepository;
     private final AiResultPort aiResultPort;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * AI 분류 결과 반영. 수행자가 사람이 아니므로 이력의 actorType 은 SYSTEM 이다.
@@ -66,6 +69,8 @@ public class TicketClassificationService {
             saveHistory(ticket, HistoryAction.PRIORITY_CHANGE, oldPriority.name(),
                     ticket.getPriority().name(), null, ActorType.SYSTEM, null);
         }
+        // 우선순위가 그대로여도 보낸다 — 감정만 바뀌어도 목록의 불만 배지가 달라진다
+        eventPublisher.publishEvent(new TicketClassifiedEvent(ticketId));
         log.info("[classification] AI 반영 ticketNo={} category={} priority={} sentiment={}",
                 ticket.getTicketNo(), ticket.getCategory(), ticket.getPriority(), ticket.getSentiment());
     }
@@ -105,6 +110,7 @@ public class TicketClassificationService {
 
         // AI 결과를 사람이 고쳤다는 기록 (overridden_by). 신수진 도메인의 정확도 측정 입력이다
         aiResultPort.markOverridden(ticketId, actorId, category.name(), priority.name());
+        eventPublisher.publishEvent(new TicketClassifiedEvent(ticketId));
         log.info("[classification] 수동 수정 ticketNo={} by={} category={} priority={}",
                 ticket.getTicketNo(), actorId, category, priority);
     }

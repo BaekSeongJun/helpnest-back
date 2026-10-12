@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.helpnest.domain.member.repository.MemberRepository;
@@ -25,6 +27,7 @@ import com.helpnest.domain.ticket.entity.TicketChannel;
 import com.helpnest.domain.ticket.entity.TicketHistory;
 import com.helpnest.domain.ticket.entity.TicketPriority;
 import com.helpnest.domain.ticket.entity.TicketStatus;
+import com.helpnest.domain.ticket.event.TicketClassifiedEvent;
 import com.helpnest.domain.ticket.port.TicketClassificationPort;
 import com.helpnest.domain.ticket.repository.TicketHistoryRepository;
 import com.helpnest.domain.ticket.repository.TicketRepository;
@@ -41,6 +44,7 @@ import com.helpnest.global.error.BusinessException;
  */
 @SpringBootTest
 @Transactional
+@RecordApplicationEvents
 @DisplayName("AI 분류 반영 흐름")
 class TicketClassificationFlowTest {
 
@@ -58,6 +62,8 @@ class TicketClassificationFlowTest {
     TicketClassificationService classificationService;
     @Autowired
     TicketClassificationPort classificationPort;
+    @Autowired
+    ApplicationEvents events;
 
     private Ticket givenReceivedTicket() {
         return ticketRepository.save(Ticket.builder()
@@ -134,6 +140,18 @@ class TicketClassificationFlowTest {
             assertThat(ticket.getFirstResponseDueAt()).isEqualTo(before);
             assertThat(historiesOf(ticket))
                     .noneMatch(h -> h.getAction() == HistoryAction.PRIORITY_CHANGE);
+        }
+
+        @Test
+        @DisplayName("우선순위가 그대로여도 분류 이벤트를 발행한다 — 감정만 바뀌어도 콘솔 불만 배지가 달라진다")
+        void publishesClassifiedEventEvenWhenPriorityUnchanged() {
+            Ticket ticket = givenReceivedTicket();
+
+            classificationService.applyAiResult(ticket.getId(), TicketCategory.DELIVERY,
+                    TicketPriority.NORMAL, Sentiment.NEGATIVE);
+
+            assertThat(events.stream(TicketClassifiedEvent.class))
+                    .containsExactly(new TicketClassifiedEvent(ticket.getId()));
         }
 
         @Test
