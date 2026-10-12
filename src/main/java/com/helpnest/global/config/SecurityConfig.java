@@ -74,6 +74,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/signup", "/api/auth/login", "/api/auth/refresh",
                                 "/api/auth/guest", "/api/auth/password/**", "/api/auth/guest/**",
+                                "/api/auth/email/**",
                                 "/api/attachments", "/api/tickets").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/faqs", "/api/faqs/**").permitAll()
                         .requestMatchers("/api/surveys/*").permitAll()
