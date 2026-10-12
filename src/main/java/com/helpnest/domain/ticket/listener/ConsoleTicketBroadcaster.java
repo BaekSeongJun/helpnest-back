@@ -8,6 +8,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import com.helpnest.domain.ticket.dto.ConsoleTicketEvent;
 import com.helpnest.domain.ticket.event.TicketAssignedEvent;
+import com.helpnest.domain.ticket.event.TicketClassifiedEvent;
 import com.helpnest.domain.ticket.event.TicketCreatedEvent;
 import com.helpnest.domain.ticket.event.TicketStatusChangedEvent;
 import com.helpnest.domain.ticket.repository.TicketRepository;
@@ -16,7 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 티켓 접수·상태 변경·배정을 콘솔 목록에 알린다 ({@code /topic/console/tickets}, docs/02 §6).
+ * 티켓 접수·상태 변경·배정·분류를 콘솔 목록에 알린다 ({@code /topic/console/tickets}, docs/02 §6).
  *
  * <h2>AFTER_COMMIT 인 이유</h2>
  * 커밋 전에 보내면 화면이 신호를 받고 목록을 다시 불러와도 아직 반영 전이라 옛 목록이 보인다.
@@ -25,9 +26,6 @@ import lombok.extern.slf4j.Slf4j;
  * <h2>@Async 를 붙이지 않는 이유</h2>
  * 하는 일이 행 1개 조회 + 브로커 메모리 큐 적재뿐이라 요청 스레드에서 끝내도 짧다.
  * {@code NotificationListener} 처럼 저장·메일이 있는 구독자와 다르다.
- *
- * <p>ponytail: AI 분류로 우선순위만 바뀌면 발행할 이벤트가 없어 신호가 가지 않는다. 다음 신호 때
- * 목록을 다시 불러오며 맞춰진다. 즉시 반영이 필요해지면 분류 반영 시점에 이벤트를 하나 추가한다.
  */
 @Slf4j
 @Component
@@ -51,6 +49,12 @@ public class ConsoleTicketBroadcaster {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onAssigned(TicketAssignedEvent event) {
+        broadcast(event.ticketId(), "UPDATED");
+    }
+
+    /** 분류만 바뀌는 경우(배정 없이 우선순위·감정 변경)에도 목록이 맞춰지도록 (#116) */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onClassified(TicketClassifiedEvent event) {
         broadcast(event.ticketId(), "UPDATED");
     }
 
