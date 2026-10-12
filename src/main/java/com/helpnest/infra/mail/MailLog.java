@@ -23,7 +23,7 @@ import org.hibernate.annotations.CreationTimestamp;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class MailLog {
 
-    public enum Type { RESOLVED_SURVEY, AGENT_REPLY, PASSWORD_RESET, GUEST_PASSWORD_RESET }
+    public enum Type { RESOLVED_SURVEY, AGENT_REPLY, PASSWORD_RESET, GUEST_PASSWORD_RESET, EMAIL_VERIFY }
 
     /** LOGGED = 로컬(LogMailTransport), 실제 발송 없음 */
     public enum Status { SENT, FAILED, LOGGED }
@@ -33,7 +33,7 @@ public class MailLog {
     @Column(name = "mail_id")
     private Long id;
 
-    // 비밀번호 재설정 메일은 티켓 없음 → NULL
+    // 비밀번호 재설정·이메일 인증 메일은 티켓 없음 → NULL
     private Long ticketId;
 
     @Column(nullable = false, length = 100)
