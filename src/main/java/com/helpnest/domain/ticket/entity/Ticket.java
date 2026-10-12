@@ -199,8 +199,8 @@ public class Ticket extends BaseTimeEntity {
      * 우선순위 변경 시 {@link #updateFirstResponseDueAt(OffsetDateTime)} 를 반드시 함께
      * 호출해야 한다(PRD 6.1 "AI 분류로 우선순위가 바뀌면 재계산").
      *
-     * <p>TODO(PMJ): S1 TicketService 에서 이 두 호출을 한 트랜잭션으로 묶고, 우선순위 변경
-     * 이력(HistoryAction.PRIORITY_CHANGE)도 같은 자리에서 남긴다.
+     * <p>두 호출과 우선순위 변경 이력(PRIORITY_CHANGE)은 {@code TicketClassificationService} 가
+     * 한 트랜잭션으로 묶는다.
      */
     public void applyClassification(TicketCategory category, TicketPriority priority, Sentiment sentiment) {
         this.category = category;
