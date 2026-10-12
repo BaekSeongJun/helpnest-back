@@ -195,6 +195,20 @@ class CustomerTicketApiTest {
         }
 
         @Test
+        @DisplayName("status 를 주면 내 티켓 중 그 상태만 보인다")
+        void filtersByStatus() throws Exception {
+            Ticket resolved = givenTicket(customerId, TicketStatus.RESOLVED);
+            givenTicket(customerId, TicketStatus.RECEIVED);
+            givenTicket(otherCustomerId, TicketStatus.RESOLVED);
+
+            mockMvc.perform(get("/api/tickets/my").param("status", "RESOLVED")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + customerToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].ticketNo").value(resolved.getTicketNo()));
+        }
+
+        @Test
         @DisplayName("page/size 파라미터가 적용된다")
         void appliesPaging() throws Exception {
             givenTicket(customerId, TicketStatus.RECEIVED);

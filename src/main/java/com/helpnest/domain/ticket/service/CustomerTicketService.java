@@ -14,6 +14,7 @@ import com.helpnest.domain.ticket.dto.TicketDetailResponse;
 import com.helpnest.domain.ticket.dto.TicketListItemResponse;
 import com.helpnest.domain.ticket.entity.Ticket;
 import com.helpnest.domain.ticket.entity.TicketReply;
+import com.helpnest.domain.ticket.entity.TicketStatus;
 import com.helpnest.domain.ticket.error.TicketErrorCode;
 import com.helpnest.domain.ticket.repository.TicketReplyRepository;
 import com.helpnest.domain.ticket.repository.TicketRepository;
@@ -54,8 +55,11 @@ public class CustomerTicketService {
      * <p>비회원은 이 API 를 쓸 수 없다 — Guest 토큰은 티켓 1건에만 유효하므로 "내 문의 목록"이
      * 성립하지 않고, 컨트롤러의 {@code JwtProvider.memberId} 가 Guest 토큰을 403 으로 막는다.
      */
-    public PageResponse<TicketListItemResponse> findMyTickets(Long customerId, Pageable pageable) {
-        Page<Ticket> page = ticketRepository.findByCustomerId(customerId, pageable);
+    public PageResponse<TicketListItemResponse> findMyTickets(Long customerId, TicketStatus status,
+            Pageable pageable) {
+        Page<Ticket> page = status == null
+                ? ticketRepository.findByCustomerId(customerId, pageable)
+                : ticketRepository.findByCustomerIdAndStatus(customerId, status, pageable);
         Map<Long, String> names = assembler.namesOf(page.getContent(), List.of());
         return PageResponse.from(page.map(t -> assembler.toListItem(t, names)));
     }
