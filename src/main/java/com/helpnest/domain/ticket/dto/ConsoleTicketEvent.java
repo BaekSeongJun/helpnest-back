@@ -11,7 +11,7 @@ import com.helpnest.domain.ticket.entity.TicketStatus;
  * 처리하므로, 화면은 이 신호를 받으면 현재 조건으로 목록을 다시 불러온다. 필드는 화면이 "지금 다시
  * 불러올 가치가 있는지" 거를 때 쓰는 최소한이다.
  *
- * @param event CREATED(신규 접수) | UPDATED(상태·담당자 변경)
+ * @param event CREATED(신규 접수) | UPDATED(상태·담당자·분류 변경)
  */
 public record ConsoleTicketEvent(Long ticketId, String event, TicketStatus status, TicketPriority priority,
         Long agentId) {

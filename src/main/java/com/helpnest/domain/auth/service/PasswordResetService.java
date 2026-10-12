@@ -105,8 +105,9 @@ public class PasswordResetService {
         ticketGuestPort.updateGuestPassword(ticketId, passwordEncoder.encode(newPassword));
     }
 
-    /** @return 메일 링크에 넣을 원문 토큰 */
-    String issue(TargetType type, Long targetId) {
+    /** @return 메일 링크에 넣을 원문 토큰. 이메일 인증(신수진, back #117)도 EMAIL_VERIFY 로 함께 쓴다 */
+    @Transactional
+    public String issue(TargetType type, Long targetId) {
         byte[] bytes = new byte[32];
         RANDOM.nextBytes(bytes);
         String raw = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
@@ -119,7 +120,8 @@ public class PasswordResetService {
      * 토큰을 쓰고 대상 id 를 돌려준다. 없음·만료·사용됨·유형 불일치는 모두 같은 오류.
      * 같은 대상의 다른 링크도 함께 사용 처리해 재설정 후 옛 메일로 다시 바꿀 수 없게 한다.
      */
-    Long consume(String rawToken, TargetType type) {
+    @Transactional
+    public Long consume(String rawToken, TargetType type) {
         if (!StringUtils.hasText(rawToken)) {
             throw new BusinessException(AuthErrorCode.RESET_TOKEN_INVALID);
         }
