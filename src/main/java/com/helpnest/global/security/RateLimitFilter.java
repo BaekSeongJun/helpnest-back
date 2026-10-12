@@ -36,7 +36,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "POST /api/tickets", new Rule(5, TEN_MINUTES, true),
             "POST /api/attachments", new Rule(5, TEN_MINUTES, true),
             "POST /api/auth/login", new Rule(10, TEN_MINUTES, false),
-            "POST /api/ai/chat", new Rule(30, TEN_MINUTES, false),            // 요청마다 LLM 을 부른다 — 비용 방어
             "POST /api/auth/signup", new Rule(5, TEN_MINUTES, false),          // 가입이 인증 메일을 보낸다 — 메일 폭탄 방지
             "POST /api/auth/email/resend", new Rule(5, TEN_MINUTES, false),
             "POST /api/auth/email/verify", new Rule(10, TEN_MINUTES, false),
