@@ -234,16 +234,20 @@ BEGIN
     v_assigned := CASE WHEN v_agent IS NOT NULL THEN v_created + make_interval(secs => 20 + floor(random() * 100)::int) END;
 
     IF v_status IN ('IN_PROGRESS', 'RESOLVED', 'CLOSED') THEN
-      -- 첫 응답: 대부분 5분~3시간(기한 안), 기한이 짧은 긴급·높음 중 3건에 1건은 기한을 10~60분 넘김
-      v_first := v_created + make_interval(mins => CASE WHEN s.urgency IN ('URGENT', 'HIGH') AND i % 3 = 0
-                                                       THEN v_minutes + 10 + floor(random() * 50)::int
-                                                       ELSE LEAST((v_minutes * 0.7)::int, 5 + floor(random() * 175)::int) END);
+      -- 첫 응답: 채팅 1~3분, 그 외 대부분 3~48분(짧은 쪽에 몰리게), 긴급 일부(전체의 5% 정도)는 기한(60분)을 5~30분 넘김
+      v_first := v_created + make_interval(mins => CASE
+                   WHEN v_channel = 'CHAT' THEN 1 + floor(random() * 3)::int
+                   WHEN s.urgency = 'URGENT' AND i % 2 = 0 THEN v_minutes + 5 + floor(random() * 25)::int
+                   ELSE LEAST((v_minutes * 0.7)::int, 3 + floor(random() ^ 2 * 45)::int) END);
       IF v_first > NOW() - interval '5 minutes' THEN v_first := NOW() - interval '5 minutes'; END IF;
     ELSE
       v_first := NULL;
     END IF;
+    -- 해결: 첫 응답 뒤 채팅 5~14분, 그 외 10분~2시간(대부분 1시간 안)
     v_resolved := CASE WHEN v_status IN ('RESOLVED', 'CLOSED')
-                       THEN LEAST(v_first + make_interval(mins => 20 + floor(random() * 280)::int), NOW() - interval '1 minute') END;
+                       THEN LEAST(v_first + make_interval(mins => CASE WHEN v_channel = 'CHAT' THEN 5 + floor(random() * 10)::int
+                                                                       ELSE 10 + floor(random() ^ 1.5 * 110)::int END),
+                                  NOW() - interval '1 minute') END;
     v_closed := CASE WHEN v_status = 'CLOSED' THEN v_resolved + interval '3 days' END;
     v_now_or_first := COALESCE(v_first, NOW());
 
