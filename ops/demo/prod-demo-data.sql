@@ -3,6 +3,7 @@
 --
 -- 실행 (운영 RDS, EC2 에서):
 --   psql "host=<rds> dbname=helpnest user=<user>" -v ON_ERROR_STOP=1 -f prod-demo-data.sql
+-- 처음 1회는 prod-reset-all.sql 로 전체를 비운 뒤 실행한다 (이 파일만 돌리면 smoke·이전 시연 데이터만 지움)
 --
 -- - 한 트랜잭션이라 중간에 실패하면 아무것도 바뀌지 않는다
 -- - 여러 번 실행해도 된다: 이전 시연 데이터(@example.com 계정의 문의·채팅·알림)를 지우고 다시 만든다
